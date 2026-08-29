@@ -1,6 +1,6 @@
 # health-chat — AGENTS.md
 
-Private, local Q&A over your own lab PDFs grounded in your records and curated guideline excerpts, answered by a local Qwen3.8-27B model with citations — no cloud calls in v1.
+Private, local Q&A over your own lab PDFs grounded in your records and curated guideline excerpts, answered by a local Qwen3.8-27B model with citations — no cloud calls.
 
 ## Quick start for agents
 
@@ -57,12 +57,12 @@ curl -H "Authorization: Bearer $PASS" -F "file=@lab.pdf" http://127.0.0.1:8787/a
 
 Public repo does not redistribute verbatim guideline text. `resources/manifest.json` lists canonical URLs and short citation names; `scripts/fetch_guidelines.py` downloads excerpts to `resources/<domain>/*.txt` on the user's machine. Install runs it for missing files only; use `--force` to re-download, `--dry-run` to inspect. Fetched `*.txt` are gitignored — see `resources/README.md`.
 
-## Hardware
+## Minimum specs
 
-v1 is Qwen3.8-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident). Smaller models are unsupported in v1 and untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`. Do not claim it runs on smaller hardware.
+Qwen3.8-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident). Smaller models are untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`.
 
 ## Security and disclaimer
 
-Local-only by default (`127.0.0.1:8787`, LLM at `127.0.0.1:8080`), no telemetry or web search in v1. Passcode is a local shared secret, not HIPAA auth; no encryption at rest. See [SECURITY.md](SECURITY.md) for privacy model and [DISCLAIMER.md](DISCLAIMER.md) — this software is for information only, not medical advice.
+Local-only by default (`127.0.0.1:8787`, LLM at `127.0.0.1:8080`), no telemetry or web search. Passcode is a local shared secret, not HIPAA auth; no encryption at rest. See [SECURITY.md](SECURITY.md) for privacy model and [DISCLAIMER.md](DISCLAIMER.md) — this software is for information only, not medical advice.
 
 Further docs: [README.md](README.md), [docs/INSTALL.md](docs/INSTALL.md), [docs/HARDWARE.md](docs/HARDWARE.md), [docs/MODELS.md](docs/MODELS.md).

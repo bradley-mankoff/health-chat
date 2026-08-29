@@ -1,37 +1,34 @@
-# health-chat — private lab-results chat (labs-only POC)
+# health-chat — private lab-results chat
 
 <!-- screenshot placeholder — replace before publish:
      ![health-chat UI](docs/screenshot.png)
-     Screenshot should show the chat + lab-parsed table with citations.
 -->
 
-> **Not medical advice.** For information only — see [DISCLAIMER.md](DISCLAIMER.md). See [SECURITY.md](SECURITY.md) for privacy model (local-only, loopback by default, no cloud).
+> **Not medical advice.** For information only — see [DISCLAIMER.md](DISCLAIMER.md). See [SECURITY.md](SECURITY.md) for privacy model.
 
-Private, local Q&A over **your own lab PDFs**, grounded in curated guideline excerpts. No data leaves your machine in v1. The local model (Qwen3.8-27B via llama.cpp/MLX) answers only from your records + retrieved guidelines, with citations.
+Private, local Q&A over **your own lab PDFs**, grounded in curated guideline excerpts. No data leaves your machine. The local model (Qwen3.8-27B via llama.cpp/MLX) answers only from your records + retrieved guidelines, with citations.
 
-**v1 scope:** Labs only (Quest PDFs best), ~6→15 lab domains, fully local (no web search), no diagnosis — see doctor.
+Robust and private — **labs only** for now. Upload a lab PDF, get structured values and plain-language context from trusted sources. See your doctor for diagnosis or treatment decisions.
 
 ---
 
 ## What it does / doesn't do
 
 - ✅ Parses Quest lab panels into structured `{name,value,unit,flag,range}` without LLM; falls back to raw chunks if parse misses
-- ✅ BM25 retrieval over your records + per-domain guideline triage
-- ✅ Cites guideline short names (e.g. “per ARUP FSH Test Directory”)
+- ✅ Retrieval over your records + per-domain guideline triage, cites short names (e.g. “per ARUP FSH Test Directory”)
+- ✅ Fully local — no cloud calls, no telemetry
 - ❌ Does NOT diagnose or recommend treatment — hedges with “only your doctor can diagnose”
-- ❌ Does NOT cover every lab in v1 (BMP/CMP/lipids/A1c/Vit D added via manifest — see `resources/manifest.json`)
-- ❌ Does NOT search the web in v1 (planned v2, PHI-sanitized)
+- ❌ Labs only — not a general health chatbot; no web search
 
 ---
 
-## Hardware
+## Minimum specs
 
-**Requires 32GB RAM or 16GB VRAM** for Qwen3.8-27B Q4_K_M (~16.5 GB). No “fits on many machines” claim in v1 — see `docs/HARDWARE.md` and `docs/MODELS.md`. MLX faster on Apple Silicon.
+- **Model:** Qwen3.8-27B Q4_K_M — ~16.5 GB on disk, ~18 GB RAM resident
+- **RAM:** **32 GB RAM** or **16 GB VRAM** with GPU offload
+- **Engine:** `llama.cpp` (`llama-server`) cross-platform; `MLX` faster on Apple Silicon — see `docs/HARDWARE.md` and `docs/MODELS.md`
 
-| Machine | Can run 27B Q4? |
-|---------|-----------------|
-| 32GB MacBook Pro (M1 Max/Pro) | Yes |
-| 16GB Mac / 8GB Air | No (v1 unsupported) |
+If you have less than 32 GB, the model will OOM — the installer warns you.
 
 ---
 
@@ -46,17 +43,17 @@ DATA_DIR=./data python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal
 ```
 
-Windows: `powershell -ExecutionPolicy Bypass -File scripts\install.ps1`
+Windows: `powershell -ExecutionPolicy Bypass -File scripts/install.ps1`
 
 MLX (Mac alt): `bash scripts/run_mlx.sh` (needs `pip install mlx-lm`)
 
-Short form + troubleshooting: see [docs/INSTALL.md](docs/INSTALL.md). Full docs: [docs/HARDWARE.md](docs/HARDWARE.md), [docs/MODELS.md](docs/MODELS.md), [SECURITY.md](SECURITY.md), [DISCLAIMER.md](DISCLAIMER.md).
+See [docs/INSTALL.md](docs/INSTALL.md) for short-form install, `docs/HARDWARE.md` for specs, `docs/MODELS.md` for model download.
 
 ---
 
 ## Uploading labs
 
-Drag-and-drop in the UI (after `UX-1` lands) or drop PDFs in `DATA_DIR` then hit **Reindex**. Parser is Quest-optimized — other labs still searchable via raw chunks but show “unparsed” in the preview table.
+Drag-and-drop in the UI or drop PDFs in `DATA_DIR` then hit **Reindex**. Parser is Quest-optimized — other labs remain searchable via raw chunks and show “unparsed” in the preview table.
 
 ---
 
@@ -71,16 +68,15 @@ rm -f .passcode
 # remove fetched guideline excerpts (keeps manifest):
 rm -rf resources/cache/
 rm -f resources/*/*.txt
-# if you used a custom DATA_DIR, delete that folder too
 ```
 
-Browsing data: chat history is in your browser's site storage — clear site data for `http://127.0.0.1:8787` to wipe it. See [SECURITY.md](SECURITY.md) and [DISCLAIMER.md](DISCLAIMER.md) for privacy scope.
+Browsing data: chat history is in your browser's site storage — clear site data for `http://127.0.0.1:8787` to wipe it.
 
 ---
 
 ## For Agents
 
-Agents: see [AGENTS.md](AGENTS.md) — one-page quick start (git clone, install, model download, run) and API endpoints. Also see `llms.txt` for the doc index.
+Agents: see [AGENTS.md](AGENTS.md) — one-page quick start (clone, install, model download, run) and API endpoints. Also see `llms.txt` for the doc index.
 
 ---
 
@@ -90,8 +86,6 @@ Agents: see [AGENTS.md](AGENTS.md) — one-page quick start (git clone, install,
 pytest -q
 python scripts/fetch_guidelines.py --dry-run
 ```
-
-See `handoff.md` for the locked open-source hardening plan and ticket graph.
 
 ---
 
