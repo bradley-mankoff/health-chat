@@ -14,6 +14,40 @@ cd "$ROOT"
 echo "== health-chat installer (macOS/Linux) =="
 echo "root: $ROOT"
 
+# --- RAM guard (Qwen3-27B Q4) ---
+# Detects total RAM via sysctl (macOS), /proc/meminfo (Linux), or free.
+# Prints "Detected X GB RAM — 27B Q4 needs ~18GB (32GB recommended)" and
+# warns at <24GB / errors at <18GB but never blocks the installer (warn-only).
+RAM_GB=""
+if command -v sysctl >/dev/null 2>&1; then
+  _mem_bytes="$(sysctl -n hw.memsize 2>/dev/null || true)"
+  if [[ -n "${_mem_bytes:-}" && "${_mem_bytes}" =~ ^[0-9]+$ ]]; then
+    RAM_GB=$(( _mem_bytes / 1024 / 1024 / 1024 ))
+  fi
+fi
+if [[ -z "${RAM_GB:-}" ]] && [[ -r /proc/meminfo ]]; then
+  _mem_kb="$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || true)"
+  if [[ -n "${_mem_kb:-}" && "${_mem_kb}" =~ ^[0-9]+$ ]]; then
+    RAM_GB=$(( _mem_kb / 1024 / 1024 ))
+  fi
+fi
+if [[ -z "${RAM_GB:-}" ]] && command -v free >/dev/null 2>&1; then
+  _mem_mb="$(free -m 2>/dev/null | awk '/^Mem:/ {print $2}' || true)"
+  if [[ -n "${_mem_mb:-}" && "${_mem_mb}" =~ ^[0-9]+$ ]]; then
+    RAM_GB=$(( (_mem_mb + 1023) / 1024 ))
+  fi
+fi
+if [[ -n "${RAM_GB:-}" ]]; then
+  echo "Detected ${RAM_GB} GB RAM — 27B Q4 needs ~18GB (32GB recommended)"
+  if (( RAM_GB < 18 )); then
+    echo "ERROR: Qwen3-27B Q4 requires ~18GB RAM; you have ${RAM_GB}GB — see docs/HARDWARE.md; installer will continue but model will OOM" >&2
+  elif (( RAM_GB < 24 )); then
+    echo "WARNING: <24GB RAM detected (${RAM_GB}GB) — 27B Q4 may be tight; 32GB recommended. See docs/HARDWARE.md" >&2
+  fi
+else
+  echo "WARNING: could not detect total RAM — 27B Q4 needs ~18GB (32GB recommended); see docs/HARDWARE.md" >&2
+fi
+# --- end RAM guard ---
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 not found — install Python 3.10+ first." >&2
   exit 1

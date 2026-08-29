@@ -17,6 +17,7 @@ unless --force is given.
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import json
 import re
 import sys
@@ -32,22 +33,163 @@ MANIFEST = BASE / "resources" / "manifest.json"
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
 
+# Expected keywords per file for validation (case-insensitive).
+_EXPECTED_KEYWORDS: dict[str, list[str]] = {
+    "hyperlipidemia_aafp.txt": ["cholesterol", "triglyceride", "hyperlipidemia", "LDL", "HDL"],
+    "diabetes_a1c_statpearls.txt": ["HbA1c", "hemoglobin", "A1C", "glucose", "diabetes"],
+    "kidney_evaluation_aafp.txt": ["creatinine", "eGFR", "kidney", "CKD", "albumin"],
+    "liver_function_aafp.txt": ["ALT", "AST", "transaminase", "liver", "bilirubin"],
+    "vitamin_d_statpearls.txt": ["vitamin D", "25-hydroxy", "cholecalciferol", "calcium"],
+    "urinalysis_aafp.txt": ["urinalysis", "proteinuria", "hematuria", "urine"],
+    "electrolytes_statpearls.txt": ["sodium", "potassium", "electrolyte", "hyponatremia", "chloride"],
+    "vitamin_b12_statpearls.txt": ["vitamin B12", "cobalamin", "B12", "folate"],
+    # fallbacks for older files (not strictly needed for validation)
+    "hypoalbuminemia_statpearls.txt": ["albumin", "hypoalbuminemia"],
+    "iron_deficiency_2025.txt": ["iron", "anemia"],
+}
+
+# Alternate user-agents to try if first is blocked.
+_USER_AGENTS = [
+    "health-chat fetcher (https://github.com/health-chat)",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+]
+
+
+def _extract_article_html(html: str) -> str:
+    """Try to isolate the main article fragment before stripping tags."""
+    # NCBI Bookshelf: <div class="... body-content ..." itemprop="text">
+    m = re.search(r'<div[^>]*class="[^"]*body-content[^"]*"[^>]*>(.*)', html, flags=re.S | re.I)
+    if m:
+        frag = m.group(1)
+        # Cut at footer if present to drop nav/footer boilerplate
+        cut = re.search(r'<footer|<div[^>]*id="footer"|<div[^>]*class="[^"]*footer[^"]*"', frag, flags=re.I)
+        if cut:
+            frag = frag[: cut.start()]
+        return frag
+    # AAFP article tag
+    m = re.search(r"<article[^>]*>(.*?)</article>", html, flags=re.S | re.I)
+    if m:
+        return m.group(1)
+    # Generic article content div
+    m = re.search(r'<div[^>]*class="[^"]*(?:article|cmp-article)[^"]*"[^>]*>(.*)', html, flags=re.S | re.I)
+    if m:
+        frag = m.group(1)
+        cut = re.search(r'<footer|<div[^>]*class="[^"]*footer[^"]*"', frag, flags=re.I)
+        if cut:
+            frag = frag[: cut.start()]
+        return frag
+    return html
+
 
 def html_to_text(html: str) -> str:
+    # Isolate article first to avoid nav-heavy truncation.
+    html = _extract_article_html(html)
     # Strip scripts/styles
     html = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     text = _TAG_RE.sub(" ", html)
-    # Decode a few entities without full parser
-    text = text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
+    # Decode entities
+    text = html_lib.unescape(text)
+    # Legacy fallbacks for any remaining entities
+    text = text.replace("&nbsp;", " ")
     text = _WS_RE.sub(" ", text).strip()
     return text
 
 
+def _is_block_page(text: str, expected: list[str] | None = None) -> bool:
+    """Heuristic: page is a block/404 rather than article text."""
+    low = text.lower()
+    if len(text.strip()) < 300:
+        return True
+    # Common block markers
+    block_phrases = ["requires javascript to function", "access denied", "403 forbidden", "404 not found", "page not found"]
+    if any(p in low for p in block_phrases):
+        # If it also contains expected keywords and is long, treat as valid (NCBI warning banner)
+        if expected and any(k.lower() in low for k in expected) and len(text) > 2000:
+            return False
+        # NCBI warning alone without article content
+        if "requires javascript" in low and expected and not any(k.lower() in low for k in expected):
+            return True
+        if "404" in low or "page not found" in low:
+            return True
+    return False
+
+
+def _trim_to_core(text: str, url: str, short_name: str, expected: list[str] | None) -> str:
+    """Trim `text` to ~3000-4000 chars of core content, keeping citation header."""
+    header = f"Source: {url} ({short_name})\n\n"
+    # If already short, just add header
+    if len(text) <= 3800:
+        return header + text
+    # Try to find a good start offset near article markers
+    markers = [
+        "SORT: KEY RECOMMENDATIONS",
+        "Continuing Education Activity",
+        "Introduction",
+        "Abstract",
+        short_name,
+    ]
+    if expected:
+        # Prefer the first expected keyword occurrence as anchor
+        low = text.lower()
+        best = None
+        for kw in expected:
+            idx = low.find(kw.lower())
+            if idx != -1 and (best is None or idx < best):
+                best = idx
+        if best is not None and best > 500:
+            # Start a bit before the keyword to keep context, but not before a marker
+            start = max(0, best - 800)
+            # Snap to nearest marker before keyword if found
+            for m in markers:
+                m_idx = text.rfind(m, 0, best)
+                if m_idx != -1 and m_idx >= start - 500:
+                    start = m_idx
+                    break
+            text = text[start:]
+        else:
+            # Fallback: find earliest marker in first half
+            for m in markers:
+                idx = text.find(m)
+                if idx != -1 and idx < len(text) * 0.5:
+                    text = text[idx:]
+                    break
+    else:
+        for m in markers:
+            idx = text.find(m)
+            if idx != -1 and idx < len(text) * 0.5:
+                text = text[idx:]
+                break
+    # Now slice to ~3500 chars, try to end at sentence boundary
+    limit = 3600
+    if len(text) > limit:
+        cut = text.rfind(". ", 3000, limit)
+        if cut != -1:
+            text = text[: cut + 1]
+        else:
+            text = text[:limit]
+    return header + text.strip()
+
+
 def fetch_url(url: str, timeout: int = 30) -> str:
-    req = Request(url, headers={"User-Agent": "health-chat fetcher (https://github.com/health-chat)"})
-    with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — intentionally fetching manifest URLs
-        charset = resp.headers.get_content_charset() or "utf-8"
-        return resp.read().decode(charset, errors="replace")
+    last_exc: Exception | None = None
+    for ua in _USER_AGENTS:
+        try:
+            req = Request(url, headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "Accept-Language": "en-US,en;q=0.9"})
+            with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — intentionally fetching manifest URLs
+                charset = resp.headers.get_content_charset() or "utf-8"
+                data = resp.read().decode(charset, errors="replace")
+                # If we got a JS-warning page but also have article, still return; validation happens later
+                return data
+        except (HTTPError, URLError, OSError) as exc:
+            last_exc = exc
+            # 404 is not UA-fixable, break early after first try
+            if isinstance(exc, HTTPError) and exc.code in (404, 410):
+                break
+            continue
+    if last_exc:
+        raise last_exc
+    raise URLError(f"failed to fetch {url}")
 
 
 def main() -> int:
@@ -85,14 +227,25 @@ def main() -> int:
             print(f"fetch {domain}/{filename} ...", end=" ", flush=True)
             raw = fetch_url(url)
             # If HTML, extract text; if already plain, keep as-is
-            text = html_to_text(raw) if "<html" in raw.lower() or "<!doctype" in raw.lower() else raw
-            # Trim to ~3000 chars focused excerpt if too long; keep head for now
-            # (curator should manually trim to <300 words for fair-use before commit)
+            is_html = "<html" in raw.lower() or "<!doctype" in raw.lower() or "<head" in raw.lower()
+            text = html_to_text(raw) if is_html else raw
+            expected = _EXPECTED_KEYWORDS.get(filename)
+            # Validate not a block/404 page
+            if _is_block_page(text, expected):
+                raise ValueError(f"fetched content looks like block/404 page (len {len(text)}, missing keywords {expected})")
+            # Trim to ~3000-4000 chars core + citation header
+            short = e.get("short_name", filename)
+            text = _trim_to_core(text, url, short, expected)
+            # Final validation: >500 chars and contains at least one expected keyword if known
+            if len(text) < 500:
+                raise ValueError(f"content too short after trim: {len(text)} chars")
+            if expected and not any(k.lower() in text.lower() for k in expected):
+                raise ValueError(f"missing expected keywords {expected} in fetched text")
             dest.parent.mkdir(parents=True, exist_ok=True)
-            dest.write_text(text[:12000])
+            dest.write_text(text)
             print(f"ok ({len(text)} chars -> {dest})")
             ok += 1
-        except (HTTPError, URLError, OSError) as exc:
+        except (HTTPError, URLError, OSError, ValueError) as exc:
             print(f"FAIL: {exc}")
             failed += 1
 

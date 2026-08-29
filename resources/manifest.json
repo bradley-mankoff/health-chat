@@ -81,60 +81,67 @@
     {
       "domain": "lipids",
       "file": "hyperlipidemia_aafp.txt",
-      "url": "https://www.aafp.org/pubs/afp/issues/2020/0701/p19.html",
-      "short_name": "AAFP Hyperlipidemia 2020",
-      "source_url": "https://www.aafp.org/pubs/afp/issues/2020/0701/p19.html"
+      "url": "https://www.aafp.org/pubs/afp/issues/2020/0915/p347.html",
+      "short_name": "AAFP Hypertriglyceridemia 2020",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2020/0915/p347.html",
+      "_fetched": true
     },
     {
       "domain": "diabetes",
       "file": "diabetes_a1c_statpearls.txt",
-      "url": "https://www.ncbi.nlm.nih.gov/books/NBK459277/",
-      "short_name": "StatPearls HbA1c",
-      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK459277/"
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK549816/",
+      "short_name": "StatPearls Hemoglobin A1C",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK549816/",
+      "_fetched": true
     },
     {
       "domain": "metabolic",
       "file": "kidney_evaluation_aafp.txt",
-      "url": "https://www.aafp.org/pubs/afp/issues/2021/0915/p64.html",
-      "short_name": "AAFP CKD Evaluation 2021",
-      "source_url": "https://www.aafp.org/pubs/afp/issues/2021/0915/p64.html"
+      "url": "https://www.aafp.org/pubs/afp/issues/2020/0915/p378.html",
+      "short_name": "AAFP CKD Evaluation 2020 VA/DoD",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2020/0915/p378.html",
+      "_fetched": true
     },
     {
       "domain": "liver",
       "file": "liver_function_aafp.txt",
-      "url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p75.html",
-      "short_name": "AAFP Liver Function Tests 2017",
-      "source_url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p75.html"
+      "url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p709.html",
+      "short_name": "AAFP Liver Transaminase 2017",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p709.html",
+      "_fetched": true
     },
     {
       "domain": "vitamin",
       "file": "vitamin_d_statpearls.txt",
       "url": "https://www.ncbi.nlm.nih.gov/books/NBK441912/",
       "short_name": "StatPearls Vitamin D Deficiency",
-      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK441912/"
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK441912/",
+      "_fetched": true
     },
     {
       "domain": "urinalysis",
       "file": "urinalysis_aafp.txt",
       "url": "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html",
       "short_name": "AAFP Urinalysis 2005",
-      "source_url": "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html"
-    }
-  ],
-  "planned_additions": [
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html",
+      "_fetched": true
+    },
     {
       "domain": "metabolic",
       "file": "electrolytes_statpearls.txt",
-      "candidate_url": "https://www.ncbi.nlm.nih.gov/books/NBK541123/ — hyponatremia or similar",
-      "short_name": "StatPearls Electrolytes (TBD)",
-      "notes": "Sodium/potassium/chloride/CO2"
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK541123/",
+      "short_name": "StatPearls Electrolytes",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK541123/",
+      "_fetched": true
     },
     {
       "domain": "vitamin",
       "file": "vitamin_b12_statpearls.txt",
-      "candidate_url": "https://www.ncbi.nlm.nih.gov/books/NBK441923/ — B12 deficiency",
-      "short_name": "StatPearls B12 Deficiency (TBD)",
-      "notes": "B12, folate; keywords VITAMIN B12, FOLATE"
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK441923/",
+      "short_name": "StatPearls Vitamin B12 Deficiency",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK441923/",
+      "_fetched": true
     }
-  ]
+  ],
+  "planned_additions": []
 }

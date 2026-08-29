@@ -78,6 +78,12 @@ Browsing data: chat history is in your browser's site storage — clear site dat
 
 ---
 
+## For Agents
+
+Agents: see [AGENTS.md](AGENTS.md) — one-page quick start (git clone, install, model download, run) and API endpoints. Also see `llms.txt` for the doc index.
+
+---
+
 ## Development
 
 ```bash
