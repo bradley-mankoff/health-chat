@@ -18,8 +18,8 @@ from pathlib import Path
 
 import httpx
 import uvicorn
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pypdf import PdfReader
@@ -38,7 +38,10 @@ if not PASSCODE and _passcode_file.exists():
 if not PASSCODE:
     PASSCODE = secrets.token_hex(4)
     _passcode_file.write_text(PASSCODE)
-
+    try:
+        os.chmod(_passcode_file, 0o600)
+    except Exception:
+        pass  # best-effort on platforms without chmod
 # Loaded-model id from llama-server (fall back to "" if unreachable).
 try:
     MODEL = httpx.get(f"{LLM_URL}/v1/models", timeout=5).json()["data"][0]["id"]
@@ -52,7 +55,7 @@ STRUCTURED RECORDS (machine-parsed from the source PDFs; authoritative for exact
 RAW RECORDS (original text; use only if STRUCTURED RECORDS is missing something):
 {context}
 
-GUIDELINES (general medical reference from professional societies and peer-reviewed sources; use them to explain what a test measures and what values typically mean. They are NOT her records — never present them as her data. Cite a guideline by its exact short name when you rely on it, e.g. "per ARUP FSH Test Directory"):
+GUIDELINES (general medical reference from professional societies and peer-reviewed sources; use them to explain what a test measures and what values typically mean. They are NOT their records — never present them as their data. Cite a guideline by its exact short name when you rely on it, e.g. "per ARUP FSH Test Directory"):
 {guidelines}
 
 Rules:
@@ -368,23 +371,25 @@ _DOMAIN_KEYWORDS = [
 # resource file -> (short citation name, source URL). Short names are paren-free
 # so they render cleanly as markdown link text.
 GUIDELINE_SOURCES = {
-    "leukocytosis_2015.txt": ("AAFP Leukocytosis 2015", "https://www.aafp.org/afp/2015/1201/p1004"),
-    "thrombocytopenia_2022.txt": ("AAFP Thrombocytopenia 2022", "https://www.aafp.org/afp/2022/0900/thrombocytopenia"),
-    "iron_deficiency_2025.txt": ("AAFP Iron Deficiency Anemia 2025", "https://www.aafp.org/afp/2025/1100/iron-deficiency-anemia"),
+    "hypothyroidism_diagnosis_2021.txt": ("AAFP Hypothyroidism 2021", "https://www.aafp.org/pubs/afp/issues/2021/0515/p605.html"),
+    "hypothyroidism_update_2012.txt": ("AAFP Hypothyroidism Update 2012", "https://www.aafp.org/pubs/afp/issues/2012/0801/p244.html"),
+    "leukocytosis_2015.txt": ("AAFP Leukocytosis 2015", "https://www.aafp.org/pubs/afp/issues/2015/1201/p1004.html"),
+    "thrombocytopenia_2022.txt": ("AAFP Thrombocytopenia 2022", "https://www.aafp.org/pubs/afp/issues/2022/0900/thrombocytopenia.html"),
+    "iron_deficiency_2025.txt": ("AAFP Iron Deficiency Anemia 2025", "https://www.aafp.org/pubs/afp/issues/2025/1100/iron-deficiency-anemia.html"),
     "microcytosis_2010.txt": ("AAFP Microcytosis 2010", "https://www.aafp.org/pubs/afp/issues/2010/1101/p1117.html"),
-    "normocytic_2000.txt": ("AAFP Normocytic Anemia 2000", "https://www.aafp.org/afp/2000/1115/p2255"),
-    "pcos_guideline_2018.txt": ("International PCOS Guideline 2018", "https://pmc.ncbi.nlm.nih.gov/articles/PMC6939856/"),
+    "normocytic_2000.txt": ("AAFP Normocytic Anemia 2000", "https://www.aafp.org/pubs/afp/issues/2000/1115/p2255.html"),
     "fsh_arup_test_directory.txt": ("ARUP FSH Test Directory", "https://ltd.aruplab.com/Tests/Pub/0070055"),
     "infertility_arup_consult.txt": ("ARUP Consult Infertility", "https://arupconsult.com/content/infertility"),
-    "hypothyroidism_update_2012.txt": ("AAFP Hypothyroidism Update 2012", "https://www.aafp.org/pubs/afp/issues/2012/0801/p244.html"),
-    "hypothyroidism_diagnosis_2021.txt": ("AAFP Hypothyroidism 2021", "https://www.aafp.org/afp/2021/0515/p605"),
+    "pcos_guideline_2018.txt": ("International PCOS Guideline 2018", "https://pmc.ncbi.nlm.nih.gov/articles/PMC6939856/"),
     "hypoalbuminemia_statpearls.txt": ("StatPearls Hypoalbuminemia", "https://www.ncbi.nlm.nih.gov/books/NBK526080/"),
-    "hyperlipidemia_aafp.txt": ("AAFP Hyperlipidemia 2020", "https://www.aafp.org/pubs/afp/issues/2020/0701/p19.html"),
-    "diabetes_a1c_statpearls.txt": ("StatPearls HbA1c", "https://www.ncbi.nlm.nih.gov/books/NBK459277/"),
-    "kidney_evaluation_aafp.txt": ("AAFP CKD Evaluation 2021", "https://www.aafp.org/pubs/afp/issues/2021/0915/p64.html"),
-    "liver_function_aafp.txt": ("AAFP Liver Function Tests 2017", "https://www.aafp.org/pubs/afp/issues/2017/1201/p75.html"),
+    "hyperlipidemia_aafp.txt": ("AAFP Hypertriglyceridemia 2020", "https://www.aafp.org/pubs/afp/issues/2020/0915/p347.html"),
+    "diabetes_a1c_statpearls.txt": ("StatPearls Hemoglobin A1C", "https://www.ncbi.nlm.nih.gov/books/NBK549816/"),
+    "kidney_evaluation_aafp.txt": ("AAFP CKD Evaluation 2020 VA/DoD", "https://www.aafp.org/pubs/afp/issues/2020/0915/p378.html"),
+    "liver_function_aafp.txt": ("AAFP Liver Transaminase 2017", "https://www.aafp.org/pubs/afp/issues/2017/1201/p709.html"),
     "vitamin_d_statpearls.txt": ("StatPearls Vitamin D Deficiency", "https://www.ncbi.nlm.nih.gov/books/NBK441912/"),
     "urinalysis_aafp.txt": ("AAFP Urinalysis 2005", "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html"),
+    "electrolytes_statpearls.txt": ("StatPearls Electrolytes", "https://www.ncbi.nlm.nih.gov/books/NBK541123/"),
+    "vitamin_b12_statpearls.txt": ("StatPearls Vitamin B12 Deficiency", "https://www.ncbi.nlm.nih.gov/books/NBK441923/"),
 }
 
 
@@ -450,8 +455,9 @@ async def index():
 @app.get("/api/health")
 async def health(request: Request):
     check_auth(request)
+    # Only expose basename to avoid leaking absolute host paths.
     return {"files": INDEX["files"], "chunks": len(INDEX["chunks"]),
-            "data_dir": str(DATA_DIR), "model": MODEL}
+            "data_dir": DATA_DIR.name, "model": MODEL}
 
 
 @app.post("/api/index")
@@ -577,9 +583,6 @@ async def guidelines(request: Request):
     }
 
 
-class ChatIn(BaseModel):
-    question: str
-    history: list[dict] = []
 
 
 # --- Async chat jobs --------------------------------------------------------
@@ -715,9 +718,10 @@ async def chat_poll(job_id: str, request: Request):
         raise HTTPException(status_code=404, detail="job expired or server restarted")
     return job
 
-
 if __name__ == "__main__":
     build_index()
+    if HOST not in ("127.0.0.1", "localhost", "::1"):
+        print(f"WARNING: HOST={HOST} is not loopback — the server will be reachable from the network; bind 127.0.0.1 unless behind VPN/TLS.")
     print(f"data dir: {DATA_DIR}")
     print(f"model:    {MODEL or '(unknown)'}")
     print(f"indexed:  {len(INDEX['files'])} files, {len(INDEX['chunks'])} chunks")

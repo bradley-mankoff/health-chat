@@ -1,8 +1,6 @@
 # health-chat — private lab-results chat
 
-<!-- screenshot placeholder — replace before publish:
-     ![health-chat UI](docs/screenshot.png)
--->
+Screenshot: open http://127.0.0.1:8787
 
 > **Not medical advice.** For information only — see [DISCLAIMER.md](DISCLAIMER.md). See [SECURITY.md](SECURITY.md) for privacy model.
 
@@ -24,7 +22,7 @@ Robust and private — **labs only** for now. Upload a lab PDF, get structured v
 
 ## Minimum specs
 
-- **Model:** Qwen3.8-27B Q4_K_M — ~16.5 GB on disk, ~18 GB RAM resident
+- **Model:** Qwen3.8-27B Q4_K_M — ~16.5 GB on disk, ~18 GB RAM resident at 8192 context
 - **RAM:** **32 GB RAM** or **16 GB VRAM** with GPU offload
 - **Engine:** `llama.cpp` (`llama-server`) cross-platform; `MLX` faster on Apple Silicon — see `docs/HARDWARE.md` and `docs/MODELS.md`
 
@@ -36,8 +34,9 @@ If you have less than 32 GB, the model will OOM — the installer warns you.
 
 ```bash
 bash scripts/install.sh          # venv + deps + fetch guidelines
-# Download Qwen3.8-27B Q4_K_M GGUF to ./models/ — see docs/MODELS.md
-llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
+mkdir -p models
+curl -L -o models/qwen3.8-27b-q4_k_m.gguf "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
+llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
 mkdir -p data && cp ~/Downloads/*.pdf data/
 DATA_DIR=./data python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal

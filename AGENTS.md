@@ -14,7 +14,7 @@ bash scripts/install.sh
 # 2) Fetch guidelines (already run by install; re-run to update missing only)
 python scripts/fetch_guidelines.py
 
-# 3) model download — Qwen3.8-27B Q4_K_M GGUF (~16.5 GB, see docs/MODELS.md)
+# 3) model download — Qwen3.8-27B Q4_K_M GGUF (~16.5 GB on disk, ~18 GB resident at 8192 context, needs 32GB RAM — see docs/MODELS.md)
 mkdir -p models
 curl -L -o models/qwen3.8-27b-q4_k_m.gguf \
   "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
@@ -59,7 +59,7 @@ Public repo does not redistribute verbatim guideline text. `resources/manifest.j
 
 ## Minimum specs
 
-Qwen3.8-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident). Smaller models are untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`.
+Qwen3.8-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident at 8192 context). Smaller models are untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`.
 
 ## Security and disclaimer
 

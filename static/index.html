@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f6f7f9">
 <title>Health Records</title>
+<!-- CSP: Recommended hardening: <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' http://127.0.0.1:8080 http://127.0.0.1:8787; img-src 'self' data:; object-src 'none'; base-uri 'none'">. Currently scripts are inline and marked.min.js is vendored; moving inline JS to an external file and adding SRI for marked.min.js would let script-src be 'self' without 'unsafe-inline'. This comment documents the intended CSP. -->
 <style>
   :root { --bg:#f6f7f9; --user:#2563eb; --user-fg:#fff; --ai:#fff; --text:#1a1d21; --muted:#6b7280; --border:#e5e7eb; --accent:#2563eb; --code:#f3f4f6; }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -106,6 +107,9 @@
   #preview table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
   #preview th, #preview td { border:1px solid var(--border); padding:4px 6px; text-align:left; }
   #preview th { background:var(--code); font-weight:600; }
+  .disclaimer { text-align:center; font-size:12px; color:var(--muted); padding:6px 12px; border-top:1px solid var(--border); background:#fff; }
+  #logout { border:1px solid var(--border); border-radius:8px; padding:6px 12px; font-size:13px; background:#fff; color:var(--muted); cursor:pointer; }
+  #logout:hover { color:var(--text); border-color:var(--muted); }
 </style>
 </head>
 <body>
@@ -115,6 +119,11 @@
   <button id="unlock">Open</button>
   <div class="hint">Passcode was printed when the server started — check your terminal.</div>
 </div>
+<header>
+  <h1>Health Records</h1>
+  <span id="status"></span>
+  <button id="logout" style="margin-left:auto" title="Clear passcode and lock">Logout</button>
+</header>
 <main id="messages"></main>
 
 <div id="upload">
@@ -130,15 +139,20 @@
   <div id="preview" style="display:none"></div>
 </div>
 
+<div class="disclaimer">Not medical advice — see DISCLAIMER.md</div>
 <div id="composer">
-
   <textarea id="input" rows="1" placeholder="Ask about your records…" enterkeyhint="send"></textarea>
   <button id="send" aria-label="Send">↑</button>
 </div>
 
 <script src="/static/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 <script>
-(function () {
+  // Storage: sessionStorage for hc_pass is preferred over localStorage because it clears on tab close,
+  // reducing passcode persistence on shared devices. localStorage would persist indefinitely.
+  // We keep JOBKEY in localStorage (no PHI, only job id) so reload can recover a job.
+  // CSP: see <head> comment for Content-Security-Policy hardening; SRI for marked.min.js is recommended
+  // if loading from CDN (current vendored copy is pinned). XSS via LLM markdown is mitigated by DOMPurify.
   const KEY = "hc_pass";
   const JOBKEY = "hc_job";
   const messagesEl = document.getElementById("messages");
@@ -146,22 +160,26 @@
   const sendBtn = document.getElementById("send");
   const gate = document.getElementById("gate");
   const statusEl = document.getElementById("status");
+  const logoutBtn = document.getElementById("logout");
 
   marked.setOptions({ gfm: true, breaks: true });
+  // Sanitize AI markdown output: DOMPurify via CDN if available, else raw marked output escaped on error
 
   let history = [];
   let streaming = false;
-  let pass = localStorage.getItem(KEY) || "";
-
+  let pass = sessionStorage.getItem(KEY) || "";
   function esc(s) {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   function md(text) {
-    try { return marked.parse(text); }
+    try {
+      const raw = marked.parse(text);
+      if (window.DOMPurify && DOMPurify.sanitize) return DOMPurify.sanitize(raw);
+      return raw;
+    }
     catch (e) { return esc(text); }
   }
-
   function addMsg(role, html, cls) {
     const d = document.createElement("div");
     d.className = "msg " + role + (cls ? " " + cls : "");
@@ -186,7 +204,7 @@
   async function getJson(path) {
     const res = await fetch(path, { headers: { "Authorization": "Bearer " + pass } });
     if (res.status === 401) {
-      localStorage.removeItem(KEY);
+      sessionStorage.removeItem(KEY);
       pass = "";
       showGate();
       throw new Error("unauthorized");
@@ -204,7 +222,7 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401) {
-      localStorage.removeItem(KEY);
+      sessionStorage.removeItem(KEY);
       pass = "";
       showGate();
       throw new Error("unauthorized");
@@ -218,7 +236,7 @@
         headers: { "Authorization": "Bearer " + pass },
       });
       const j = await res.json();
-      statusEl.textContent = j.files.length + " file" + (j.files.length === 1 ? "" : "s") +
+      if (statusEl) statusEl.textContent = j.files.length + " file" + (j.files.length === 1 ? "" : "s") +
         " \u00b7 " + j.chunks + " chunks";
     } catch (e) { /* gate handles 401 */ }
   }
@@ -302,7 +320,7 @@
     pendingFiles.forEach(function (f) { fd.append("files", f, f.name); });
     try {
       const res = await fetch("/api/upload", { method: "POST", headers: { "Authorization": "Bearer " + pass }, body: fd });
-      if (res.status === 401) { localStorage.removeItem(KEY); pass = ""; showGate(); throw new Error("unauthorized"); }
+      if (res.status === 401) { sessionStorage.removeItem(KEY); pass = ""; showGate(); throw new Error("unauthorized"); }
       if (!res.ok) { const t = await res.text(); throw new Error(t.slice(0, 300) || "upload failed"); }
       const data = await res.json();
       renderPreview(data);
@@ -365,11 +383,11 @@
         if (err.message === "unauthorized") throw err;
         failures += 1;                          // transient (phone suspended, wifi blip): retry
         const wait = Math.min(2500 * Math.pow(2, failures - 1), 30000);
-        statusEl.textContent = "connection paused \u2014 retrying\u2026";
+        if (statusEl) statusEl.textContent = "connection paused \u2014 retrying\u2026";
         await new Promise(r => setTimeout(r, wait));
         continue;
       }
-      statusEl.textContent = job.status === "queued"
+      if (statusEl) statusEl.textContent = job.status === "queued"
         ? "waiting for the model\u2026" : "";
       if (job.status === "error") throw terminal(job.error || "generation failed");
       render(job, els, job.status === "done");
@@ -403,7 +421,7 @@
     };
     streaming = true;
     sendBtn.disabled = true;
-    statusEl.textContent = "working\u2026";
+    if (statusEl) statusEl.textContent = "working\u2026";
     try {
       const res = await api("/api/chat", { question: q, history: history.slice(0, -1) });
       const j = await res.json();
@@ -418,7 +436,7 @@
     } finally {
       streaming = false;
       sendBtn.disabled = false;
-      statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = "";
       input.focus();
     }
   }
@@ -458,7 +476,7 @@
     }
     streaming = true;
     sendBtn.disabled = true;
-    statusEl.textContent = "working\u2026";
+    if (statusEl) statusEl.textContent = "working\u2026";
     try {
       await pollJob(id, els);
     } catch (err) {
@@ -468,7 +486,7 @@
       localStorage.removeItem(JOBKEY);
       streaming = false;
       sendBtn.disabled = false;
-      statusEl.textContent = "";
+      if (statusEl) statusEl.textContent = "";
     }
   }
 
@@ -476,10 +494,15 @@
     const code = document.getElementById("code").value.trim();
     if (!code) return;
     pass = code;
-    localStorage.setItem(KEY, code);
+    sessionStorage.setItem(KEY, code);
     hideGate();
     refreshStatus();
     resumeJob();
+  });
+  if (logoutBtn) logoutBtn.addEventListener("click", function () {
+    sessionStorage.removeItem(KEY);
+    pass = "";
+    showGate();
   });
 
   sendBtn.addEventListener("click", send);

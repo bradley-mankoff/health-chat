@@ -1,4 +1,4 @@
-# Minimum specs
+# Hardware
 
 ## Model
 
@@ -11,7 +11,16 @@ Health-chat runs **Qwen3.8-27B** (GGUF `Q4_K_M` ≈ **16.5 GB** on disk, ≈ **1
 - **OS:** macOS 13+, Windows 10/11, or Linux (x64/ARM64)
 - **Python:** 3.10+
 
-The installer checks RAM and warns if you have less than 32 GB — the model will OOM below ~18 GB.
+| Component | Minimum | Notes |
+|---|---|---|
+| RAM | 32 GB | ~18 GB resident at 8192 context; installer warns below 32 GB |
+| VRAM | 16 GB | alternative to 32 GB RAM with GPU offload |
+| Disk | ~20 GB free | ~16.5 GB model + venv + guidelines |
+| OS | macOS 13+, Windows 10/11, or Linux | x64/ARM64 |
+| Python | 3.10+ | |
+| Model | Qwen3.8-27B Q4_K_M | ~16.5 GB on disk, ~18 GB resident at 8192 context |
+
+The installer checks RAM and warns if you have less than 32 GB — the model will OOM below ~18 GB resident at 8192 context.
 
 ## Engine
 

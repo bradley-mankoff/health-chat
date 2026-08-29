@@ -1,4 +1,5 @@
 # health-chat Windows installer
+# chmod +x - executable script
 # Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path

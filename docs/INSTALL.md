@@ -13,13 +13,12 @@ What it does: creates `.venv`, `pip install -e .[dev]`, fetches guideline excerp
 Then:
 
 ```bash
-# 1) Download Qwen3.8-27B Q4_K_M GGUF to ./models/ — see MODELS.md (~16.5 GB, needs 32GB RAM)
-# 2) Start LLM
-llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
+# Qwen3.8-27B Q4_K_M — ~16.5 GB on disk, ~18 GB resident at 8192 context, needs 32GB RAM — see MODELS.md
+mkdir -p models
+curl -L -o models/qwen3.8-27b-q4_k_m.gguf "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
+llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
 #    or on Apple Silicon (faster): bash scripts/run_mlx.sh
-# 3) Put lab PDFs in ./data/ (or set DATA_DIR)
 mkdir -p data && cp ~/Downloads/*.pdf data/
-# 4) Run app
 DATA_DIR=./data python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal
 ```
@@ -40,5 +39,5 @@ See [README.md — How to uninstall](../README.md#how-to-uninstall--remove-data)
 
 - `llama-server: command not found` → install llama.cpp: `brew install llama.cpp` (Mac) or build from https://github.com/ggml-org/llama.cpp
 - `python3 not found` → install Python 3.10+
-- OOM with 27B → you need 32GB RAM / 16GB VRAM; see HARDWARE.md — v1 is 27B-only
+- OOM with 27B → you need 32GB RAM / 16GB VRAM (~18 GB resident at 8192 context); see HARDWARE.md — v1 is 27B-only
 - Guidelines failed to fetch → re-run `python scripts/fetch_guidelines.py` or `--dry-run` to inspect URLs in `resources/manifest.json`

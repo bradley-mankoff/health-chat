@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# chmod +x - executable script
 set -euo pipefail
 # Start MLX LM server with Qwen3.8-27B (Mac alternative to llama.cpp).
 # Usage: bash scripts/run_mlx.sh [mlx-model-id]

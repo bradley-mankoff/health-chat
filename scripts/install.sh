@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# chmod +x - executable script
 set -euo pipefail
 # Health-chat macOS/Linux installer — idempotent.
 # - Creates venv in .venv

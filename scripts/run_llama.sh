@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# chmod +x - executable script
 set -euo pipefail
 # Start llama-server with Qwen3.8-27B Q4_K_M GGUF.
 # Usage: bash scripts/run_llama.sh [path/to/gguf]

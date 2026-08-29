@@ -5,7 +5,7 @@ Private local lab-results chat — Qwen3.8-27B via llama.cpp/MLX, fully local, n
 ## Docs
 
 - [AGENTS.md](AGENTS.md) — agent quick start: clone, install, fetch, model download, llama-server, run, API endpoints
-- [README.md](README.md) — overview, minimum specs (32GB RAM / 16GB VRAM for 27B Q4_K_M), quick start
+- [README.md](README.md) — overview, minimum specs (32GB RAM / 16GB VRAM, ~18 GB resident at 8192 context, ~16.5 GB on disk for 27B Q4_K_M), quick start
 - [docs/INSTALL.md](docs/INSTALL.md) — install and troubleshooting
 - [docs/HARDWARE.md](docs/HARDWARE.md) — minimum specs
 - [docs/MODELS.md](docs/MODELS.md) — model download and verification
@@ -17,5 +17,5 @@ Private local lab-results chat — Qwen3.8-27B via llama.cpp/MLX, fully local, n
 
 ## Constraints
 
-- Qwen3.8-27B only (Q4_K_M ~16.5 GB, needs 32GB RAM or 16GB VRAM); do not claim smaller hardware
+- Qwen3.8-27B only (Q4_K_M ~16.5 GB on disk, ~18 GB resident at 8192 context, needs 32GB RAM or 16GB VRAM); do not claim smaller hardware
 - Local only: binds 127.0.0.1:8787, LLM at 127.0.0.1:8080
