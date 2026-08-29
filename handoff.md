@@ -1,7 +1,7 @@
 # Health-Chat — Open-Source Hardening Handoff
 
 ## Goal
-Empower people to review their **own lab results** (common, confusing, important) in a **fully local, privacy-preserving** way. Local model (Qwen3-27B via llama.cpp/MLX) never uses training weights alone — it is grounded in **patient's own records (chunked PDFs) + curated guideline excerpts** (AAFP/ARUP/StatPearls) retrieved via BM25. No web search in v1. Person can download with simple command; agent can find and install it.
+Empower people to review their **own lab results** (common, confusing, important) in a **fully local, privacy-preserving** way. Local model (Qwen3.8-27B via llama.cpp/MLX) never uses training weights alone — it is grounded in **patient's own records (chunked PDFs) + curated guideline excerpts** (AAFP/ARUP/StatPearls) retrieved via BM25. No web search in v1. Person can download with simple command; agent can find and install it.
 
 **Meta-goal:** Open source in hours, polished enough to publish. v1 = **labs-only proof of concept** with static corpus (fetched on install, not redistributed). Reframe to done-when-shipped, not perfect.
 
@@ -13,7 +13,7 @@ Empower people to review their **own lab results** (common, confusing, important
 | 2 | **v1 = labs-only static corpus POC** | Vision = general health Q&A, but `resources/` only covers 6 domains. Honest scoping. Dynamic corpus deferred. | GUIDE-1/2 |
 | 3 | **Top-15 labs via fetcher manifest, not verbatim excerpts in repo** | User clarified: provide links, user fetches corpus on install (copyright-safe). Since fetcher ships, "90 min copy-paste" becomes ~15 min adding URLs to manifest + expanding `_DOMAIN_KEYWORDS`. Future non-dev ticket can curate more. | GUIDE-2 |
 | 4 | **127.0.0.1 by default, HOST env override** | User accepted change. Was `0.0.0.0` → liability with bold privacy claims. `server.py:HOST` now defaults `127.0.0.1`, `uvicorn.run(host=HOST)`. Docs must say not to expose port. | Already applied in this handoff |
-| 5 | **Reframe hardware claim: 27B-only, no "fits many hardware"** | Qwen3 27B Q4 ~16.5GB → ~18GB RAM. 8GB Air OOMs. New claim: "Requires 32GB RAM or 16GB VRAM; see HARDWARE.md" + MLX option for Mac. | DIST-1 |
+| 5 | **Reframe hardware claim: 27B-only, no "fits many hardware"** | Qwen3.8 27B Q4 ~16.5GB → ~18GB RAM. 8GB Air OOMs. New claim: "Requires 32GB RAM or 16GB VRAM; see HARDWARE.md" + MLX option for Mac. | DIST-1 |
 | 6 | **MIT + DISCLAIMER.md + SECURITY.md + UI banner** | Prompt walks diagnosis tightrope ("consistent with X ... only doctor can diagnose"). Needs loud non-advice disclaimer. | REPO-1 |
 | 7 | **Ship fetcher, not verbatim txt** | AAFP content copyrighted. `resources/manifest.json` + `scripts/fetch_guidelines.py` → user fetches, we don't redistribute. | GUIDE-1 |
 | 8 | **Drag-drop upload + validation table** | `~/lab-data` manual + Quest-only parser that silently returns `[]` for Labcorp is trust-killer. `POST /api/upload` + UI drop zone. | UX-1 |
@@ -36,7 +36,7 @@ PDFs in ./data → extract_text(pypdf) → chunk_text(600/100) → BM25
                                     → parse_labs → structured JSON (authoritative values)
 resources/manifest.json → fetch → guideline chunks → per-domain BM25 → triage_guidelines(question)
 Prompt = structured + raw chunks + guideline chunks + strict rules (answer ONLY from records/guidelines, cite short name, flag out-of-range, hedge diagnosis)
-LLM = llama-server (OpenAI compat) at LLM_URL, default Qwen3-27B Q4_K_M (~16.5GB). MLX alternative on Mac.
+LLM = llama-server (OpenAI compat) at LLM_URL, default Qwen3.8-27B Q4_K_M (~16.5GB). MLX alternative on Mac.
 Auth = Bearer PASSCODE, localhost-only.
 ```
 
@@ -71,7 +71,7 @@ flowchart TD
 - `resources/manifest.json` + `scripts/fetch_guidelines.py` work; `resources/*.txt` not in public tree (or in `resources/cache/` gitignored).
 - `POST /api/upload` + drop zone + parsed labs table visible in UI; Quest parse success/fail per file.
 - `tests/test_parse_labs.py` + `tests/test_triage.py` pass in CI/local.
-- `scripts/install.sh` / `scripts/install.ps1` + `docs/HARDWARE.md` + `docs/MODELS.md` cover Qwen3-27B + MLX.
+- `scripts/install.sh` / `scripts/install.ps1` + `docs/HARDWARE.md` + `docs/MODELS.md` cover Qwen3.8-27B + MLX.
 - Two BACKLOG tickets filed: dynamic corpus v2 + PHI-safe query sanitization.
 
 ## Out of Scope for v1
@@ -83,7 +83,7 @@ flowchart TD
 ## Constraints
 
 - Keep `llama.cpp` primary, MLX as Mac option (not full dual-engine refactor unless trivial).
-- Qwen3-27B oriented; no 7B/14B fallback tiers (document requirement honestly).
+- Qwen3.8-27B oriented; no 7B/14B fallback tiers (document requirement honestly).
 - Fully local v1 → bold privacy claims allowed, but must state localhost-only in SECURITY.md.
 - No PHI in search terms (deferred to BACKLOG, but manifest URLs are safe).
 

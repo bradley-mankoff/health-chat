@@ -1,6 +1,6 @@
 # health-chat — AGENTS.md
 
-Private, local Q&A over your own lab PDFs grounded in your records and curated guideline excerpts, answered by a local Qwen3-27B model with citations — no cloud calls in v1.
+Private, local Q&A over your own lab PDFs grounded in your records and curated guideline excerpts, answered by a local Qwen3.8-27B model with citations — no cloud calls in v1.
 
 ## Quick start for agents
 
@@ -14,13 +14,13 @@ bash scripts/install.sh
 # 2) Fetch guidelines (already run by install; re-run to update missing only)
 python scripts/fetch_guidelines.py
 
-# 3) model download — Qwen3-27B Q4_K_M GGUF (~16.5 GB, see docs/MODELS.md)
+# 3) model download — Qwen3.8-27B Q4_K_M GGUF (~16.5 GB, see docs/MODELS.md)
 mkdir -p models
-curl -L -o models/qwen3-27b-q4_k_m.gguf \
-  "https://huggingface.co/bartowski/Qwen_Qwen3-27B-GGUF/resolve/main/Qwen_Qwen3-27B-Q4_K_M.gguf"
+curl -L -o models/qwen3.8-27b-q4_k_m.gguf \
+  "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
 
 # 4) Start LLM (OpenAI-compatible API on 127.0.0.1:8080)
-llama-server -m models/qwen3-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
+llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
 # Mac alternative: bash scripts/run_mlx.sh
 
 # 5) Run app
@@ -59,7 +59,7 @@ Public repo does not redistribute verbatim guideline text. `resources/manifest.j
 
 ## Hardware
 
-v1 is Qwen3-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident). Smaller models are unsupported in v1 and untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`. Do not claim it runs on smaller hardware.
+v1 is Qwen3.8-27B only — 27B Q4_K_M requires 32GB RAM or 16GB VRAM (~18 GB resident). Smaller models are unsupported in v1 and untested for grounding quality. See `docs/HARDWARE.md` and `docs/MODELS.md`. Do not claim it runs on smaller hardware.
 
 ## Security and disclaimer
 

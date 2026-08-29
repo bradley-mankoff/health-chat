@@ -6,7 +6,7 @@ Set-Location $Root
 Write-Host "== health-chat installer (Windows) =="
 Write-Host "root: $Root"
 
-# --- RAM guard (Qwen3-27B Q4) ---
+# --- RAM guard (Qwen3.8-27B Q4) ---
 # Detects total RAM via Win32_PhysicalMemory (Windows); falls back to
 # Win32_ComputerSystem and, for pwsh on macOS/Linux, sysctl / /proc/meminfo.
 # Prints "Detected X GB RAM — 27B Q4 needs ~18GB (32GB recommended)" and
@@ -52,7 +52,7 @@ if (-not $RamGb) {
 if ($RamGb) {
   Write-Host "Detected $RamGb GB RAM — 27B Q4 needs ~18GB (32GB recommended)"
   if ($RamGb -lt 18) {
-    Write-Host "ERROR: Qwen3-27B Q4 requires ~18GB RAM; you have ${RamGb}GB — see docs/HARDWARE.md; installer will continue but model will OOM" -ForegroundColor Red
+    Write-Host "ERROR: Qwen3.8-27B Q4 requires ~18GB RAM; you have ${RamGb}GB — see docs/HARDWARE.md; installer will continue but model will OOM" -ForegroundColor Red
   } elseif ($RamGb -lt 24) {
     Write-Host "WARNING: <24GB RAM detected (${RamGb}GB) — 27B Q4 may be tight; 32GB recommended. See docs/HARDWARE.md" -ForegroundColor Yellow
   }
@@ -88,8 +88,8 @@ if (-not (Get-Command llama-server -ErrorAction SilentlyContinue)) {
 Write-Host ""
 Write-Host "== done =="
 Write-Host "Next:"
-Write-Host "  1) Download Qwen3-27B Q4_K_M GGUF to .\models\ (see docs\MODELS.md) — requires ~18GB RAM"
-Write-Host "  2) Start LLM:  llama-server -m models\qwen3-27b-q4_k_m.gguf --port 8080 --ctx-size 8192"
+Write-Host "  1) Download Qwen3.8-27B Q4_K_M GGUF to .\models\ (see docs\MODELS.md) — requires ~18GB RAM"
+Write-Host "  2) Start LLM:  llama-server -m models\qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192"
 Write-Host "  3) Put lab PDFs in .\data\ (or set DATA_DIR)"
 Write-Host "  4) Run app:  `$env:DATA_DIR='./data'; .\.venv\Scripts\python.exe server.py"
 Write-Host "     Open http://127.0.0.1:8787  (passcode printed on start)"

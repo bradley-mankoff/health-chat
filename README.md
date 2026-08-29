@@ -7,7 +7,7 @@
 
 > **Not medical advice.** For information only — see [DISCLAIMER.md](DISCLAIMER.md). See [SECURITY.md](SECURITY.md) for privacy model (local-only, loopback by default, no cloud).
 
-Private, local Q&A over **your own lab PDFs**, grounded in curated guideline excerpts. No data leaves your machine in v1. The local model (Qwen3-27B via llama.cpp/MLX) answers only from your records + retrieved guidelines, with citations.
+Private, local Q&A over **your own lab PDFs**, grounded in curated guideline excerpts. No data leaves your machine in v1. The local model (Qwen3.8-27B via llama.cpp/MLX) answers only from your records + retrieved guidelines, with citations.
 
 **v1 scope:** Labs only (Quest PDFs best), ~6→15 lab domains, fully local (no web search), no diagnosis — see doctor.
 
@@ -26,7 +26,7 @@ Private, local Q&A over **your own lab PDFs**, grounded in curated guideline exc
 
 ## Hardware
 
-**Requires 32GB RAM or 16GB VRAM** for Qwen3-27B Q4_K_M (~16.5 GB). No “fits on many machines” claim in v1 — see `docs/HARDWARE.md` and `docs/MODELS.md`. MLX faster on Apple Silicon.
+**Requires 32GB RAM or 16GB VRAM** for Qwen3.8-27B Q4_K_M (~16.5 GB). No “fits on many machines” claim in v1 — see `docs/HARDWARE.md` and `docs/MODELS.md`. MLX faster on Apple Silicon.
 
 | Machine | Can run 27B Q4? |
 |---------|-----------------|
@@ -39,8 +39,8 @@ Private, local Q&A over **your own lab PDFs**, grounded in curated guideline exc
 
 ```bash
 bash scripts/install.sh          # venv + deps + fetch guidelines
-# Download Qwen3-27B Q4_K_M GGUF to ./models/ — see docs/MODELS.md
-llama-server -m models/qwen3-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
+# Download Qwen3.8-27B Q4_K_M GGUF to ./models/ — see docs/MODELS.md
+llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
 mkdir -p data && cp ~/Downloads/*.pdf data/
 DATA_DIR=./data python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal

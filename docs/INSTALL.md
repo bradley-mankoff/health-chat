@@ -13,9 +13,9 @@ What it does: creates `.venv`, `pip install -e .[dev]`, fetches guideline excerp
 Then:
 
 ```bash
-# 1) Download Qwen3-27B Q4_K_M GGUF to ./models/ — see MODELS.md (~16.5 GB, needs 32GB RAM)
+# 1) Download Qwen3.8-27B Q4_K_M GGUF to ./models/ — see MODELS.md (~16.5 GB, needs 32GB RAM)
 # 2) Start LLM
-llama-server -m models/qwen3-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
+llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 &
 #    or on Apple Silicon (faster): bash scripts/run_mlx.sh
 # 3) Put lab PDFs in ./data/ (or set DATA_DIR)
 mkdir -p data && cp ~/Downloads/*.pdf data/

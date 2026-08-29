@@ -1,8 +1,8 @@
 # Hardware Requirements
 
-## v1: Qwen3-27B only
+## v1: Qwen3.8-27B only
 
-Health-chat is spec'd around **Qwen3-27B** (GGUF `Q4_K_M` ≈ **16.5 GB** on disk, ≈ **18 GB RAM** resident with typical context). This is the model the prompt and grounding were tested against. Smaller tiers are **not** officially supported in v1 — they fit but have not been validated for grounding quality.
+Health-chat is spec'd around **Qwen3.8-27B** (GGUF `Q4_K_M` ≈ **16.5 GB** on disk, ≈ **18 GB RAM** resident with typical context). This is the model the prompt and grounding were tested against. Smaller tiers are **not** officially supported in v1 — they fit but have not been validated for grounding quality.
 
 | Machine | RAM / VRAM | Can run 27B Q4? | Notes |
 |---------|------------|-----------------|-------|
@@ -16,7 +16,7 @@ Health-chat is spec'd around **Qwen3-27B** (GGUF `Q4_K_M` ≈ **16.5 GB** on dis
 ## Engine
 
 - **Primary:** `llama.cpp` (`llama-server`) — cross-platform, runs GGUFs on CPU or GPU.
-- **Mac alternative:** `MLX` (`mlx_lm` server) — faster on Apple Silicon, same Qwen3-27B weights converted to MLX format. See `scripts/run_mlx.sh`.
+- **Mac alternative:** `MLX` (`mlx_lm` server) — faster on Apple Silicon, same Qwen3.8-27B weights converted to MLX format. See `scripts/run_mlx.sh`.
 
 Both expose an OpenAI-compatible API at `LLM_URL` (default `http://127.0.0.1:8080`).
 

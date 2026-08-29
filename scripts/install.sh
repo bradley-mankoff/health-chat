@@ -14,7 +14,7 @@ cd "$ROOT"
 echo "== health-chat installer (macOS/Linux) =="
 echo "root: $ROOT"
 
-# --- RAM guard (Qwen3-27B Q4) ---
+# --- RAM guard (Qwen3.8-27B Q4) ---
 # Detects total RAM via sysctl (macOS), /proc/meminfo (Linux), or free.
 # Prints "Detected X GB RAM — 27B Q4 needs ~18GB (32GB recommended)" and
 # warns at <24GB / errors at <18GB but never blocks the installer (warn-only).
@@ -40,7 +40,7 @@ fi
 if [[ -n "${RAM_GB:-}" ]]; then
   echo "Detected ${RAM_GB} GB RAM — 27B Q4 needs ~18GB (32GB recommended)"
   if (( RAM_GB < 18 )); then
-    echo "ERROR: Qwen3-27B Q4 requires ~18GB RAM; you have ${RAM_GB}GB — see docs/HARDWARE.md; installer will continue but model will OOM" >&2
+    echo "ERROR: Qwen3.8-27B Q4 requires ~18GB RAM; you have ${RAM_GB}GB — see docs/HARDWARE.md; installer will continue but model will OOM" >&2
   elif (( RAM_GB < 24 )); then
     echo "WARNING: <24GB RAM detected (${RAM_GB}GB) — 27B Q4 may be tight; 32GB recommended. See docs/HARDWARE.md" >&2
   fi
@@ -81,8 +81,8 @@ fi
 echo ""
 echo "== done =="
 echo "Next:"
-echo "  1) Download Qwen3-27B Q4_K_M GGUF to ./models/ (see docs/MODELS.md) — requires ~18GB RAM"
-echo "  2) Start LLM:  llama-server -m models/qwen3-27b-q4_k_m.gguf --port 8080 --ctx-size 8192"
+echo "  1) Download Qwen3.8-27B Q4_K_M GGUF to ./models/ (see docs/MODELS.md) — requires ~18GB RAM"
+echo "  2) Start LLM:  llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192"
 echo "     or MLX on Mac:  bash scripts/run_mlx.sh"
 echo "  3) Put lab PDFs in ./data/ (or set DATA_DIR)"
 echo "  4) Run app:  DATA_DIR=./data .venv/bin/python server.py"

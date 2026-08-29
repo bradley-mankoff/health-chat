@@ -1,13 +1,13 @@
 # health-chat
 
-Private local lab-results chat (labs-only POC) — Qwen3-27B via llama.cpp/MLX, fully local, no cloud.
+Private local lab-results chat (labs-only POC) — Qwen3.8-27B via llama.cpp/MLX, fully local, no cloud.
 
 ## Docs
 
 - [AGENTS.md](AGENTS.md) — agent quick start: clone, install, fetch, model download, llama-server, run, API endpoints
 - [README.md](README.md) — overview, hardware (32GB RAM / 16GB VRAM for 27B Q4_K_M), quick start
 - [docs/INSTALL.md](docs/INSTALL.md) — install and troubleshooting
-- [docs/HARDWARE.md](docs/HARDWARE.md) — Qwen3-27B-only hardware requirements (32GB RAM / 16GB VRAM)
+- [docs/HARDWARE.md](docs/HARDWARE.md) — Qwen3.8-27B-only hardware requirements (32GB RAM / 16GB VRAM)
 - [docs/MODELS.md](docs/MODELS.md) — model download and verification
 - [SECURITY.md](SECURITY.md) — privacy model (127.0.0.1 loopback, no cloud, Bearer passcode)
 - [DISCLAIMER.md](DISCLAIMER.md) — not medical advice
@@ -17,5 +17,5 @@ Private local lab-results chat (labs-only POC) — Qwen3-27B via llama.cpp/MLX, 
 
 ## Constraints
 
-- v1 is Qwen3-27B only (Q4_K_M ~16.5 GB, needs 32GB RAM or 16GB VRAM); do not claim smaller hardware
+- v1 is Qwen3.8-27B only (Q4_K_M ~16.5 GB, needs 32GB RAM or 16GB VRAM); do not claim smaller hardware
 - Local only: binds 127.0.0.1:8787, LLM at 127.0.0.1:8080
