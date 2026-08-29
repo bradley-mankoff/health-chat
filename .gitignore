@@ -1,0 +1,14 @@
+.passcode
+labs.json
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+data/
+models/
+resources/cache/
+# Fetched guideline excerpts are local-only and ignored; manifest stays committed.
+# resources/manifest.json is intentionally tracked (corpus index) and is NOT ignored
+# (it is .json, not .txt). All fetched *.txt under resources/ are local-only:
+resources/*/*.txt
+resources/**/*.txt

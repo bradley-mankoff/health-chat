@@ -1,0 +1,140 @@
+{
+  "_comment": "Guideline manifest — fetcher downloads excerpts on install. Verbatim text is NOT redistributed in the public repo; user fetches it. Each entry maps a local file to its canonical URL and short citation name (used by GUIDELINE_SOURCES in server.py). Keep excerpts <300 words where possible and always cite URL.",
+  "guidelines": [
+    {
+      "domain": "thyroid",
+      "file": "hypothyroidism_diagnosis_2021.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2021/0515/p605.html",
+      "short_name": "AAFP Hypothyroidism 2021",
+      "source_url": "https://www.aafp.org/afp/2021/0515/p605"
+    },
+    {
+      "domain": "thyroid",
+      "file": "hypothyroidism_update_2012.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2012/0801/p244.html",
+      "short_name": "AAFP Hypothyroidism Update 2012",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2012/0801/p244.html"
+    },
+    {
+      "domain": "cbc",
+      "file": "leukocytosis_2015.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2015/1201/p1004.html",
+      "short_name": "AAFP Leukocytosis 2015",
+      "source_url": "https://www.aafp.org/afp/2015/1201/p1004"
+    },
+    {
+      "domain": "cbc",
+      "file": "thrombocytopenia_2022.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2022/0900/thrombocytopenia.html",
+      "short_name": "AAFP Thrombocytopenia 2022",
+      "source_url": "https://www.aafp.org/afp/2022/0900/thrombocytopenia"
+    },
+    {
+      "domain": "anemia",
+      "file": "iron_deficiency_2025.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2025/1100/iron-deficiency-anemia.html",
+      "short_name": "AAFP Iron Deficiency Anemia 2025",
+      "source_url": "https://www.aafp.org/afp/2025/1100/iron-deficiency-anemia"
+    },
+    {
+      "domain": "anemia",
+      "file": "microcytosis_2010.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2010/1101/p1117.html",
+      "short_name": "AAFP Microcytosis 2010",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2010/1101/p1117.html"
+    },
+    {
+      "domain": "anemia",
+      "file": "normocytic_2000.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2000/1115/p2255.html",
+      "short_name": "AAFP Normocytic Anemia 2000",
+      "source_url": "https://www.aafp.org/afp/2000/1115/p2255"
+    },
+    {
+      "domain": "fsh",
+      "file": "fsh_arup_test_directory.txt",
+      "url": "https://ltd.aruplab.com/Tests/Pub/0070055",
+      "short_name": "ARUP FSH Test Directory",
+      "source_url": "https://ltd.aruplab.com/Tests/Pub/0070055"
+    },
+    {
+      "domain": "fsh",
+      "file": "infertility_arup_consult.txt",
+      "url": "https://arupconsult.com/content/infertility",
+      "short_name": "ARUP Consult Infertility",
+      "source_url": "https://arupconsult.com/content/infertility"
+    },
+    {
+      "domain": "androgen",
+      "file": "pcos_guideline_2018.txt",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6939856/",
+      "short_name": "International PCOS Guideline 2018",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6939856/"
+    },
+    {
+      "domain": "albumin",
+      "file": "hypoalbuminemia_statpearls.txt",
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK526080/",
+      "short_name": "StatPearls Hypoalbuminemia",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK526080/"
+    },
+    {
+      "domain": "lipids",
+      "file": "hyperlipidemia_aafp.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2020/0701/p19.html",
+      "short_name": "AAFP Hyperlipidemia 2020",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2020/0701/p19.html"
+    },
+    {
+      "domain": "diabetes",
+      "file": "diabetes_a1c_statpearls.txt",
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK459277/",
+      "short_name": "StatPearls HbA1c",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK459277/"
+    },
+    {
+      "domain": "metabolic",
+      "file": "kidney_evaluation_aafp.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2021/0915/p64.html",
+      "short_name": "AAFP CKD Evaluation 2021",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2021/0915/p64.html"
+    },
+    {
+      "domain": "liver",
+      "file": "liver_function_aafp.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p75.html",
+      "short_name": "AAFP Liver Function Tests 2017",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2017/1201/p75.html"
+    },
+    {
+      "domain": "vitamin",
+      "file": "vitamin_d_statpearls.txt",
+      "url": "https://www.ncbi.nlm.nih.gov/books/NBK441912/",
+      "short_name": "StatPearls Vitamin D Deficiency",
+      "source_url": "https://www.ncbi.nlm.nih.gov/books/NBK441912/"
+    },
+    {
+      "domain": "urinalysis",
+      "file": "urinalysis_aafp.txt",
+      "url": "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html",
+      "short_name": "AAFP Urinalysis 2005",
+      "source_url": "https://www.aafp.org/pubs/afp/issues/2005/0315/p1153.html"
+    }
+  ],
+  "planned_additions": [
+    {
+      "domain": "metabolic",
+      "file": "electrolytes_statpearls.txt",
+      "candidate_url": "https://www.ncbi.nlm.nih.gov/books/NBK541123/ — hyponatremia or similar",
+      "short_name": "StatPearls Electrolytes (TBD)",
+      "notes": "Sodium/potassium/chloride/CO2"
+    },
+    {
+      "domain": "vitamin",
+      "file": "vitamin_b12_statpearls.txt",
+      "candidate_url": "https://www.ncbi.nlm.nih.gov/books/NBK441923/ — B12 deficiency",
+      "short_name": "StatPearls B12 Deficiency (TBD)",
+      "notes": "B12, folate; keywords VITAMIN B12, FOLATE"
+    }
+  ]
+}

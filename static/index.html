@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f6f7f9">
+<title>Health Records</title>
+<style>
+  :root { --bg:#f6f7f9; --user:#2563eb; --user-fg:#fff; --ai:#fff; --text:#1a1d21; --muted:#6b7280; --border:#e5e7eb; --accent:#2563eb; --code:#f3f4f6; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html,body { height:100%; }
+  body {
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:var(--bg); color:var(--text);
+    display:flex; flex-direction:column; height:100dvh;
+  }
+  header {
+    padding: calc(env(safe-area-inset-top) + 12px) 16px 10px;
+    border-bottom:1px solid var(--border); background:var(--bg);
+    display:flex; align-items:baseline; gap:10px;
+  }
+  header h1 { font-size:17px; font-weight:600; }
+  header span { font-size:12px; color:var(--muted); }
+  #messages { flex:1; overflow-y:auto; padding:14px 14px 8px; -webkit-overflow-scrolling:touch; }
+  .msg { max-width:92%; padding:12px 14px; border-radius:16px; font-size:16px; line-height:1.5; margin-bottom:12px; }
+  .msg.user { background:var(--user); color:var(--user-fg); margin-left:auto; border-bottom-right-radius:4px; white-space:pre-wrap; word-wrap:break-word; }
+  .msg.ai { background:var(--ai); border:1px solid var(--border); border-bottom-left-radius:4px; }
+  .msg.ai.err { border-color:#fca5a5; color:#b91c1c; }
+
+  /* markdown body */
+  .answer-body > *:first-child { margin-top:0; }
+  .answer-body > *:last-child { margin-bottom:0; }
+  .answer-body p { margin:8px 0; }
+  .answer-body h1, .answer-body h2, .answer-body h3, .answer-body h4 { margin:14px 0 6px; font-size:1.05em; }
+  .answer-body h1 { font-size:1.2em; } .answer-body h2 { font-size:1.1em; }
+  .answer-body ul, .answer-body ol { padding-left:22px; margin:8px 0; }
+  .answer-body li { margin:3px 0; }
+  .answer-body strong { font-weight:600; }
+  .answer-body code { background:var(--code); padding:1px 5px; border-radius:5px; font-size:0.9em; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .answer-body pre { background:var(--code); padding:10px; border-radius:8px; overflow-x:auto; margin:8px 0; }
+  .answer-body pre code { background:none; padding:0; }
+  .answer-body table { border-collapse:collapse; margin:8px 0; font-size:0.92em; width:100%; }
+  .answer-body th, .answer-body td { border:1px solid var(--border); padding:5px 8px; text-align:left; }
+  .answer-body th { background:var(--code); }
+  .answer-body a { color:var(--accent); text-decoration:underline; word-break:break-all; }
+
+  /* thinking */
+  .think { margin-bottom:8px; border:1px solid var(--border); border-radius:10px; background:var(--bg); }
+  .think summary { padding:7px 12px; font-size:12px; color:var(--muted); cursor:pointer; user-select:none; }
+  .think .think-body { padding:0 12px 10px; font-size:13px; color:var(--muted); line-height:1.5;
+    max-height:220px; overflow-y:auto; border-top:1px solid var(--border); padding-top:8px; }
+  .think .think-body > *:first-child { margin-top:0; }
+  .think .think-body ul, .think .think-body ol { padding-left:18px; margin:4px 0; }
+
+  .msg .srcs { display:block; margin-top:10px; font-size:12px; color:var(--muted); border-top:1px solid var(--border); padding-top:6px; }
+  .cursor { display:inline-block; width:7px; height:16px; background:var(--accent); vertical-align:-2px; animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  #composer {
+    padding: 8px 14px calc(env(safe-area-inset-bottom) + 10px);
+    border-top:1px solid var(--border); background:var(--bg);
+    display:flex; align-items:flex-end; gap:8px;
+  }
+  #input {
+    flex:1; resize:none; border:1px solid var(--border); border-radius:18px;
+    padding:10px 14px; font-size:16px; font-family:inherit; line-height:1.35;
+    max-height:120px; background:#fff; outline:none;
+  }
+  #input:focus { border-color:var(--accent); }
+  #send {
+    border:none; border-radius:50%; width:40px; height:40px; flex:0 0 40px;
+    background:var(--accent); color:#fff; font-size:18px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+  }
+  #send:disabled { opacity:.4; }
+  #gate {
+    position:fixed; inset:0; background:var(--bg); z-index:10;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:24px;
+  }
+  #gate h2 { font-size:18px; font-weight:600; }
+  #gate input {
+    border:1px solid var(--border); border-radius:12px; padding:12px 16px;
+    font-size:18px; text-align:center; width:220px; outline:none; background:#fff;
+  }
+  #gate button {
+    border:none; border-radius:12px; padding:12px 32px; font-size:16px;
+    background:var(--accent); color:#fff; cursor:pointer;
+  }
+  #upload { padding:10px 14px; border-top:1px solid var(--border); background:#fff; }
+  #drop-zone { border:2px dashed var(--border); border-radius:12px; padding:14px; text-align:center; cursor:pointer; transition:border-color .15s, background .15s; }
+  #drop-zone.dragover { border-color:var(--accent); background:#eef2ff; }
+  #drop-zone .dz-main { font-size:14px; font-weight:500; }
+  #drop-zone .dz-link { color:var(--accent); text-decoration:underline; cursor:pointer; }
+  #drop-zone .dz-sub { font-size:12px; color:var(--muted); margin-top:4px; }
+  #upload-actions { display:flex; gap:8px; margin-top:8px; align-items:center; }
+  #upload-btn { border:none; border-radius:10px; padding:8px 16px; font-size:14px; background:var(--accent); color:#fff; cursor:pointer; }
+  #upload-btn:disabled { opacity:.4; cursor:default; }
+  #upload-status { font-size:13px; color:var(--muted); }
+  #preview { margin-top:10px; border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+  #preview .prev-head { padding:8px 12px; font-size:13px; font-weight:600; border-bottom:1px solid var(--border); background:var(--bg); }
+  #preview .prev-file { padding:8px 12px; font-size:13px; border-bottom:1px solid var(--border); background:#fff; }
+  #preview .prev-file:last-child { border-bottom:none; }
+  #preview .prev-file .pf-name { font-weight:600; }
+  #preview .prev-file .pf-status { color:var(--muted); }
+  #preview table { width:100%; border-collapse:collapse; font-size:12px; margin-top:6px; }
+  #preview th, #preview td { border:1px solid var(--border); padding:4px 6px; text-align:left; }
+  #preview th { background:var(--code); font-weight:600; }
+</style>
+</head>
+<body>
+<div id="gate" style="display:none">
+  <h2>Health Records</h2>
+  <input id="code" type="password" inputmode="text" autocomplete="off" placeholder="Passcode" autocapitalize="off" spellcheck="false">
+  <button id="unlock">Open</button>
+  <div class="hint">Passcode was printed when the server started — check your terminal.</div>
+</div>
+<main id="messages"></main>
+
+<div id="upload">
+  <div id="drop-zone" tabindex="0" role="button" aria-label="Upload lab PDFs">
+    <div class="dz-main">Drop PDFs here or <label for="file-input" class="dz-link">choose files</label></div>
+    <div class="dz-sub">PDF, TXT, MD — stays on this device, private to you</div>
+    <input id="file-input" type="file" multiple accept=".pdf,.txt,.md,application/pdf" hidden>
+  </div>
+  <div id="upload-actions">
+    <button id="upload-btn" disabled>Upload</button>
+    <span id="upload-status"></span>
+  </div>
+  <div id="preview" style="display:none"></div>
+</div>
+
+<div id="composer">
+
+  <textarea id="input" rows="1" placeholder="Ask about your records…" enterkeyhint="send"></textarea>
+  <button id="send" aria-label="Send">↑</button>
+</div>
+
+<script src="/static/marked.min.js"></script>
+<script>
+(function () {
+  const KEY = "hc_pass";
+  const JOBKEY = "hc_job";
+  const messagesEl = document.getElementById("messages");
+  const input = document.getElementById("input");
+  const sendBtn = document.getElementById("send");
+  const gate = document.getElementById("gate");
+  const statusEl = document.getElementById("status");
+
+  marked.setOptions({ gfm: true, breaks: true });
+
+  let history = [];
+  let streaming = false;
+  let pass = localStorage.getItem(KEY) || "";
+
+  function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function md(text) {
+    try { return marked.parse(text); }
+    catch (e) { return esc(text); }
+  }
+
+  function addMsg(role, html, cls) {
+    const d = document.createElement("div");
+    d.className = "msg " + role + (cls ? " " + cls : "");
+    d.innerHTML = html;
+    messagesEl.appendChild(d);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return d;
+  }
+
+  function newAiBubble() {
+    return addMsg("ai",
+      '<details class="think" hidden><summary>Thinking</summary><div class="think-body"></div></details>' +
+      '<div class="answer-body"><span class="cursor"></span></div>');
+  }
+
+  function showGate() {
+    gate.style.display = "flex";
+    document.getElementById("code").focus();
+  }
+  function hideGate() { gate.style.display = "none"; }
+
+  async function getJson(path) {
+    const res = await fetch(path, { headers: { "Authorization": "Bearer " + pass } });
+    if (res.status === 401) {
+      localStorage.removeItem(KEY);
+      pass = "";
+      showGate();
+      throw new Error("unauthorized");
+    }
+    return res;
+  }
+
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + pass,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (res.status === 401) {
+      localStorage.removeItem(KEY);
+      pass = "";
+      showGate();
+      throw new Error("unauthorized");
+    }
+    return res;
+  }
+
+  async function refreshStatus() {
+    try {
+      const res = await fetch("/api/health", {
+        headers: { "Authorization": "Bearer " + pass },
+      });
+      const j = await res.json();
+      statusEl.textContent = j.files.length + " file" + (j.files.length === 1 ? "" : "s") +
+        " \u00b7 " + j.chunks + " chunks";
+    } catch (e) { /* gate handles 401 */ }
+  }
+
+  // --- Upload: drag-drop + file input + preview table -----------------------
+  const dropZone = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+  const uploadBtn = document.getElementById("upload-btn");
+  const uploadStatus = document.getElementById("upload-status");
+  const previewEl = document.getElementById("preview");
+  let pendingFiles = [];
+
+  function updateUploadBtn() {
+    uploadBtn.disabled = pendingFiles.length === 0;
+    if (pendingFiles.length) {
+      uploadStatus.textContent = pendingFiles.length + " file" + (pendingFiles.length === 1 ? "" : "s") + " selected — click Upload";
+    } else {
+      uploadStatus.textContent = "";
+      previewEl.style.display = "none";
+    }
+  }
+
+  function setPending(files) {
+    pendingFiles = Array.from(files || []);
+    updateUploadBtn();
+  }
+
+  fileInput.addEventListener("change", function () { setPending(fileInput.files); });
+  dropZone.addEventListener("click", function (e) {
+    if (e.target.tagName === "LABEL") return;
+    fileInput.click();
+  });
+  dropZone.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+  });
+  ["dragenter", "dragover"].forEach(function (ev) {
+    dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.add("dragover"); });
+  });
+  ["dragleave", "drop"].forEach(function (ev) {
+    dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.remove("dragover"); });
+  });
+  dropZone.addEventListener("drop", function (e) {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length) setPending(dt.files);
+  });
+
+  function renderPreview(data) {
+    const preview = data.parsed_preview || data.parsed_labs || [];
+    const files = data.files || [];
+    const errors = data.errors || [];
+    let html = "";
+    if (preview.length) {
+      preview.forEach(function (p) {
+        const status = p.status || (p.labs_parsed ? "parsed " + p.labs_parsed + " labs" : "unparsed \u2014 raw chunks only");
+        html += '<div class="prev-file"><span class="pf-name">' + esc(p.file) + '</span> \u2014 <span class="pf-status">' + esc(status) + '</span>';
+        if (p.labs && p.labs.length) {
+          html += '<table><thead><tr><th>name</th><th>value</th><th>unit</th><th>flag</th><th>range</th></tr></thead><tbody>';
+          p.labs.forEach(function (row) {
+            const rangeStr = (row.ranges || []).map(function (r) { return r.range + (r.phase ? " " + r.phase : ""); }).join("; ");
+            html += "<tr><td>" + esc(row.name || "") + "</td><td>" + esc(String(row.value != null ? row.value : "")) + "</td><td>" + esc(row.unit || "") + "</td><td>" + esc(row.flag || "") + "</td><td>" + esc(rangeStr) + "</td></tr>";
+          });
+          html += "</tbody></table>";
+        }
+        html += "</div>";
+      });
+    }
+    if (errors.length) {
+      html += '<div class="prev-file" style="color:#b91c1c"><strong>Errors:</strong> ' + esc(errors.join("; ")) + "</div>";
+    }
+    if (!html) html = '<div class="prev-file">No files</div>';
+    previewEl.innerHTML = '<div class="prev-head">Upload result \u2014 ' + esc(String(files.length)) + ' file' + (files.length === 1 ? "" : "s") + ' indexed</div>' + html;
+    previewEl.style.display = "block";
+  }
+
+  async function doUpload() {
+    if (!pendingFiles.length) return;
+    uploadBtn.disabled = true;
+    uploadStatus.textContent = "Uploading\u2026";
+    previewEl.style.display = "none";
+    const fd = new FormData();
+    pendingFiles.forEach(function (f) { fd.append("files", f, f.name); });
+    try {
+      const res = await fetch("/api/upload", { method: "POST", headers: { "Authorization": "Bearer " + pass }, body: fd });
+      if (res.status === 401) { localStorage.removeItem(KEY); pass = ""; showGate(); throw new Error("unauthorized"); }
+      if (!res.ok) { const t = await res.text(); throw new Error(t.slice(0, 300) || "upload failed"); }
+      const data = await res.json();
+      renderPreview(data);
+      const n = (data.uploaded && data.uploaded.length) || (data.parsed_preview && data.parsed_preview.length) || pendingFiles.length;
+      uploadStatus.textContent = "Done \u2014 " + n + " file(s) saved";
+      pendingFiles = [];
+      fileInput.value = "";
+      uploadBtn.disabled = true;
+      refreshStatus();
+    } catch (err) {
+      uploadStatus.textContent = "Upload failed: " + err.message;
+      uploadBtn.disabled = false;
+    }
+  }
+  uploadBtn.addEventListener("click", doUpload);
+
+  // Turn model citations into clickable links, e.g. "per ARUP FSH Test Directory"
+  function applyLinks(text, gl) {
+    for (const g of gl) {
+      text = text.split(g.name).join("[" + g.name + "](" + g.url + ")");
+      text = text.split(g.file).join("[" + g.name + "](" + g.url + ")");
+    }
+    text = text.replace(/\[src: [^\]]+\]/g, "");  // chunk artifacts, if echoed
+    return text;
+  }
+
+  function render(job, els, done) {
+    const think = els.think, thinkBody = els.thinkBody, answerBody = els.answerBody;
+    const thinkText = job.reasoning.join("");
+    const answer = job.answer.join("");
+    const gl = job.gl || [];
+    if (thinkText) {
+      think.hidden = false;
+      think.open = true;
+      thinkBody.innerHTML = md(thinkText);
+    }
+    answerBody.innerHTML = md(applyLinks(answer, gl));
+    if (!done) answerBody.insertAdjacentHTML("beforeend", '<span class="cursor"></span>');
+    if (job.sources && job.sources.length) {
+      answerBody.insertAdjacentHTML("beforeend",
+        '<div class="srcs">Source: ' + esc(job.sources.join(", ")) + "</div>");
+    }
+    if (done && thinkText) think.open = false;
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function pollJob(id, els) {
+    let failures = 0;
+    for (;;) {
+      let job;
+      try {
+        const res = await getJson("/api/chat/" + id);
+        if (res.status === 404) {
+          throw terminal("the answer was lost (the server restarted mid-generation) \u2014 please ask again");
+        }
+        job = await res.json();
+        failures = 0;
+      } catch (err) {
+        if (err.terminal) throw err;           // auth / job lost: give up
+        if (err.message === "unauthorized") throw err;
+        failures += 1;                          // transient (phone suspended, wifi blip): retry
+        const wait = Math.min(2500 * Math.pow(2, failures - 1), 30000);
+        statusEl.textContent = "connection paused \u2014 retrying\u2026";
+        await new Promise(r => setTimeout(r, wait));
+        continue;
+      }
+      statusEl.textContent = job.status === "queued"
+        ? "waiting for the model\u2026" : "";
+      if (job.status === "error") throw terminal(job.error || "generation failed");
+      render(job, els, job.status === "done");
+      if (job.status === "done") {
+        history.push({ role: "assistant", content: job.answer.join("") });
+        return;
+      }
+      await new Promise(r => setTimeout(r, 2500));
+    }
+  }
+
+  function terminal(msg) {
+    const e = new Error(msg);
+    e.terminal = true;
+    return e;
+  }
+
+  async function send() {
+    const q = input.value.trim();
+    if (!q || streaming) return;
+    input.value = "";
+    input.style.height = "auto";
+    addMsg("user", esc(q));
+    history.push({ role: "user", content: q });
+    history = history.slice(-8);
+    const bubble = newAiBubble();
+    const els = {
+      think: bubble.querySelector(".think"),
+      thinkBody: bubble.querySelector(".think-body"),
+      answerBody: bubble.querySelector(".answer-body"),
+    };
+    streaming = true;
+    sendBtn.disabled = true;
+    statusEl.textContent = "working\u2026";
+    try {
+      const res = await api("/api/chat", { question: q, history: history.slice(0, -1) });
+      const j = await res.json();
+      localStorage.setItem(JOBKEY, j.id);
+      await pollJob(j.id, els);
+      localStorage.removeItem(JOBKEY);  // success: key consumed
+    } catch (err) {
+      bubble.className = "msg ai err";
+      bubble.textContent = "Something went wrong: " + err.message;
+      if (err.terminal || err.message === "unauthorized") localStorage.removeItem(JOBKEY);
+      // transient failure: keep the key so a reload can still recover the answer
+    } finally {
+      streaming = false;
+      sendBtn.disabled = false;
+      statusEl.textContent = "";
+      input.focus();
+    }
+  }
+
+  // Reload/suspension recovery: an in-flight or finished job is still on the server.
+  async function resumeJob() {
+    const id = localStorage.getItem(JOBKEY);
+    if (!id || !pass) return;
+    let job;
+    try {
+      const res = await getJson("/api/chat/" + id);
+      if (!res.ok) { localStorage.removeItem(JOBKEY); return; }
+      job = await res.json();
+    } catch (e) { return; }
+    if (job.status === "error") {
+      addMsg("user", esc(job.question));
+      const b = addMsg("ai", '<div class="answer-body"></div>', "err");
+      b.textContent = "This answer failed server-side: " + (job.error || "generation failed") +
+        ". Please ask again.";
+      localStorage.removeItem(JOBKEY);
+      return;
+    }
+    addMsg("user", esc(job.question));
+    history.push({ role: "user", content: job.question });
+    history = history.slice(-8);
+    const bubble = newAiBubble();
+    const els = {
+      think: bubble.querySelector(".think"),
+      thinkBody: bubble.querySelector(".think-body"),
+      answerBody: bubble.querySelector(".answer-body"),
+    };
+    if (job.status === "done") {
+      render(job, els, true);
+      history.push({ role: "assistant", content: job.answer.join("") });
+      localStorage.removeItem(JOBKEY);
+      return;
+    }
+    streaming = true;
+    sendBtn.disabled = true;
+    statusEl.textContent = "working\u2026";
+    try {
+      await pollJob(id, els);
+    } catch (err) {
+      bubble.className = "msg ai err";
+      bubble.textContent = "Something went wrong: " + err.message;
+    } finally {
+      localStorage.removeItem(JOBKEY);
+      streaming = false;
+      sendBtn.disabled = false;
+      statusEl.textContent = "";
+    }
+  }
+
+  document.getElementById("unlock").addEventListener("click", function () {
+    const code = document.getElementById("code").value.trim();
+    if (!code) return;
+    pass = code;
+    localStorage.setItem(KEY, code);
+    hideGate();
+    refreshStatus();
+    resumeJob();
+  });
+
+  sendBtn.addEventListener("click", send);
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+  });
+  input.addEventListener("input", function () {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 120) + "px";
+  });
+
+  if (!pass) showGate();
+  else { refreshStatus(); resumeJob(); }
+})();
+</script>
+</body>
+</html>

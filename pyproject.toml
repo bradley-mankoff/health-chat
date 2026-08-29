@@ -1,0 +1,23 @@
+[project]
+name = "health-chat"
+version = "0.1.0"
+description = "Private, local health-records chat — grounded Q&A over your own lab PDFs with trusted guideline references"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn>=0.30",
+  "httpx>=0.27",
+  "pypdf>=4.2",
+  "rank-bm25>=0.2.2",
+  "pydantic>=2.6",
+  "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

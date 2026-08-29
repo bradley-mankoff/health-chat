@@ -1,0 +1,65 @@
+Specimen
+DZ123456
+Requisition
+012345
+DOB:
+01/15/1990
+Sex:
+F
+DOE,JANE
+TESTING
+
+Analyte
+Value
+Reference Range:
+WHITE BLOOD CELL COUNT
+5.0
+Thousand/uL
+Reference Range:
+3.8-10.8
+Thousand/uL
+RED BLOOD CELL COUNT
+3.77 L
+Million/uL
+Reference Range:
+3.80-5.10
+Million/uL
+HEMOGLOBIN
+11.2 L
+g/dL
+Reference Range:
+11.7-15.5
+g/dL
+
+Analyte
+Value
+Reference Range:
+CHOLESTEROL, TOTAL
+245 H
+mg/dL
+Reference Range:
+0-200
+mg/dL
+TRIGLYCERIDES
+180 H
+mg/dL
+Reference Range:
+0-150
+mg/dL
+
+Analyte
+Value
+Reference Range:
+FSH
+13.2
+mIU/mL
+Reference Range:
+Follicular Phase
+2.5-10.2
+Mid-cycle Peak
+3.1-17.7
+Luteal Phase
+1.5-9.1
+Postmenopausal
+23.0-116.3
+mIU/mL
