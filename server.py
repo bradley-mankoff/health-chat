@@ -15,13 +15,14 @@ import os
 import re
 import secrets
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from rank_bm25 import BM25Okapi
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -442,9 +443,20 @@ def _safe_filename(name: str) -> str:
     return safe
 
 
+MAX_HISTORY = 8
+MAX_HISTORY_CHARS = 4000
+
+
+class HistoryEntry(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=MAX_HISTORY_CHARS, strict=True)
+
+
 class ChatIn(BaseModel):
     question: str
-    history: list[dict] = []
+    history: list[HistoryEntry] = Field(default=[], max_length=MAX_HISTORY)
 
 
 @app.get("/")
@@ -614,13 +626,21 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
                 seen_gl.add(m.group(1))
                 name, url = GUIDELINE_SOURCES[m.group(1)]
                 gl_used.append({"name": name, "url": url, "file": m.group(1)})
+        history_msgs = []
+        for m in body.history[-MAX_HISTORY:]:
+            if isinstance(m, HistoryEntry):
+                history_msgs.append({"role": m.role, "content": m.content})
+            elif isinstance(m, dict) and m.get("role") in ("user", "assistant"):
+                c = m.get("content")
+                if isinstance(c, str) and 1 <= len(c) <= MAX_HISTORY_CHARS:
+                    history_msgs.append({"role": m["role"], "content": c})
         messages = [
             {"role": "system", "content": SYSTEM_TEMPLATE.format(
                 structured=INDEX["structured"] or "(no structured data available)",
                 context="\n\n".join(ctx),
                 guidelines="\n\n".join(guideline_chunks) or "(no guidelines matched)",
             )},
-            *body.history[-8:],
+            *history_msgs,
             {"role": "user", "content": body.question},
         ]
         effort_raw = os.environ.get("REASONING_EFFORT")
