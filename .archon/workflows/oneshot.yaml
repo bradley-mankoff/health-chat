@@ -1,0 +1,39 @@
+name: oneshot
+description: |
+  Single small-tier implementer in the worktree. Default tactic for
+  lights-off factory work. Use for well-specified, gated slices. Not a
+  review workflow.
+
+nodes:
+  - id: implement
+    model: small
+    prompt: |
+      Implement this slice in this worktree.
+
+      $ARGUMENTS
+
+      Match existing style. Shortest correct diff. Run the repo gate if one
+      exists (pytest, node verify.js, etc.) and fix failures before you stop.
+      Write a short record of files + decisions to $ARTIFACTS_DIR/record.md.
+
+  - id: draft-pr
+    bash: |
+      set -euo pipefail
+      # Single owner of PR creation: the implementer commits only.
+      # Commit anything new, push to update any existing PR, and create
+      # exactly one PR when none exists for this branch yet.
+      REF="${FACTORY_REF:-task}"
+      TITLE="${FACTORY_TITLE:-$REF}"
+      git add -A
+      git diff --cached --quiet || git commit -m "factory: $REF"
+      git push -u origin HEAD
+      BRANCH="$(git branch --show-current)"
+      EXISTING="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+      if [ -n "$EXISTING" ]; then
+        echo "PR already exists for $BRANCH: #$EXISTING"
+        exit 0
+      fi
+      gh pr create --draft --base "${FACTORY_BASE_BRANCH:-develop}" \
+        --title "[$REF] $TITLE" \
+        --body "Factory slice \`$REF\`. Draft. Approve to merge (auto-merge). Issue: $REF"
+    depends_on: [implement]
