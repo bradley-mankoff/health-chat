@@ -1,6 +1,6 @@
 # health-chat Windows installer
 # chmod +x - executable script
-# Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1
+# Usage: powershell -ExecutionPolicy Bypass -File scripts\install.ps1 [--dev]
 $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
@@ -65,18 +65,28 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
   Write-Error "python not found — install Python 3.10+ and add to PATH."
   exit 1
 }
+$pyOk = & python -c 'import sys; print(1 if sys.version_info >= (3,10) else 0)'
+if ($pyOk -ne "1") {
+  Write-Error "Python 3.10+ required — found $(& python --version 2>&1)."
+  exit 1
+}
 if (-not (Test-Path ".venv")) {
   Write-Host "-> creating .venv"
   python -m venv .venv
 }
-& .\.venv\Scripts\Activate.ps1
-python -m pip install -U pip wheel -q
-Write-Host "-> pip install -e .[dev]"
-pip install -e ".[dev]" -q
+$VenvPy = Join-Path $Root ".venv\Scripts\python.exe"
+& $VenvPy -m pip install -U pip wheel -q
+if ($args -contains "--dev") {
+  Write-Host "-> pip install -e .[dev]"
+  & $VenvPy -m pip install -e ".[dev]" -q
+} else {
+  Write-Host "-> pip install -e ."
+  & $VenvPy -m pip install -e . -q
+}
 
 if (Test-Path "resources\manifest.json") {
   Write-Host "-> fetching guidelines (missing only)"
-  python scripts\fetch_guidelines.py
+  & $VenvPy scripts\fetch_guidelines.py
   if ($LASTEXITCODE -ne 0) { Write-Host "warning: some fetches failed — see output" }
 }
 
