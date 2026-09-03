@@ -1,0 +1,20 @@
+# Mode B project config. Copied into a projectified repo as .archon/config.yaml
+# (installed only when absent; never clobbers existing config).
+#
+# Model-neutral on purpose: no providers, model IDs, or aliases are pinned
+# here. Model tiers (small/medium/large) belong to the Archon installation /
+# user config, where each install maps a tier to its own provider + model.
+# Workflows under mode-b/workflows/ select the portable `small` and `large`
+# tiers; Archon resolves them per installation. Public clones need no
+# Bradley-specific provider settings.
+#
+# This file intentionally contains no `assistants:`, `aliases:`, or `tiers:`
+# blocks. Everything Archon needs has a default; anything provider-specific
+# lives in the user config. To pin tiers for a repo, add e.g.:
+#
+#   tiers:
+#     large: { provider: claude, model: opus }
+
+# Empty mapping: deliberately no keys. This config is a valid empty object
+# (not null); Archon falls back to its defaults for everything.
+{}
