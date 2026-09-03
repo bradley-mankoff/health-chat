@@ -1,0 +1,13 @@
+{
+  "tracker": "piyaz",
+  "max_concurrent": 3,
+  "default_tactic": "oneshot",
+  "allow_fusion": true,
+  "base_branch": "main",
+  "gate": "pytest -q",
+  "brief_max_chars": 24000,
+  "max_run_hours": 24,
+  "max_attempts": 2,
+  "piyaz_project": "HCH",
+  "auto_merge": true
+}
