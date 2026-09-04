@@ -416,7 +416,7 @@ def triage_guidelines(question: str, k_per_domain: int = 3, k_total: int = 6) ->
     if not domains:
         return []
     hits = []
-    for dom in domains:
+    for dom in sorted(domains):
         g = INDEX.get("guidelines", {}).get(dom)
         if not g or not g["bm25"]:
             continue
@@ -617,6 +617,8 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
     job["status"] = "running"
     try:
         ctx = retrieve(body.question)
+        if not ctx:
+            ctx = retrieve("health medication result lab test blood", k=6)
         guideline_chunks = triage_guidelines(body.question)
         gl_used = []
         seen_gl = set()
