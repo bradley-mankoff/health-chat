@@ -142,7 +142,9 @@ def parse_meta(text: str) -> dict:
 
 
 # --- Deterministic lab-panel parser (Quest Diagnostics layout) -------------
-# Extracts {name, value, unit, flag, ranges[]} without any LLM. Anything the
+# Extracts {name, value, raw, unit, flag, ranges[]} without any LLM. `value`
+# is the exact reported token ("<0.01", "1,234"); `raw` is the same token
+# as a plain str for downstream consumers. Anything the
 # parser misses is still covered by the raw text chunks in the prompt.
 
 _SKIP_LINES = {
@@ -160,6 +162,24 @@ _UNITS = {"g/dL", "%", "pg", "fL", "ng/dL", "pg/mL", "nmol/L", "mIU/mL", "mIU/L"
 # (Follicular, Luteal, Mid-cycle, Postmenopausal, Phase, Peak, First/Second/
 # Third trimester) are kept — they are meaningful label content.
 _LABEL_NOISE = {"Reference", "Range", "or", "=", ">", "<", "Years", "Pregnancy", "Ranges"}
+
+
+# Quest reports use "<0.01", ">150", "1,234", "-5.2", "+3" style tokens.
+# value holds the plain number (baseline int/float semantics); value_raw
+# preserves the exact reported token including comparator and separators.
+_NUM = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+_CMP = r"[<>]=?"
+_VALUE_RE = re.compile(rf"({_CMP})?\s*({_NUM})\s*([LH]{{1,2}})?")
+_RANGE_RE = re.compile(rf"((?:{_CMP})?{_NUM})-((?:{_CMP})?{_NUM})")
+_RANGE_LOW_RE = re.compile(rf"((?:{_CMP})?{_NUM})-")
+_RANGE_NUM_RE = re.compile(rf"((?:{_CMP})?{_NUM})")
+_RANGE_SINGLE_RE = re.compile(rf"({_CMP}{_NUM})")
+
+
+def _num_value(num: str):
+    """Plain number for a validated numeric token (baseline semantics)."""
+    s = num.replace(",", "")
+    return int(s) if "." not in s else float(s)
 
 
 def _is_unit(t: str) -> bool:
@@ -182,7 +202,7 @@ def _looks_like_name(t: str) -> bool:
 def _value_ahead(lines: list[str], start: int) -> bool:
     """A real test name is followed by its value within a few lines."""
     for j in range(start, min(start + 6, len(lines))):
-        if re.fullmatch(r"\d+(?:\.\d+)?\s*[LH]{0,2}", lines[j].strip()):
+        if _VALUE_RE.fullmatch(lines[j].strip()):
             return True
     return False
 
@@ -211,14 +231,15 @@ def parse_labs(text: str) -> list[dict]:
             continue  # patient/ordering header noise before the first panel
         if state == "scan":
             if _looks_like_name(t) and _value_ahead(lines, i + 1):
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
         elif state == "name":
-            m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([LH]{1,2})?", t)
+            m = _VALUE_RE.fullmatch(t)
             if m:
-                raw = m.group(1)
-                cur["value"] = int(raw) if "." not in raw else float(raw)  # exact token form
-                cur["flag"] = m.group(2) or ""
+                tok = (m.group(1) or "") + m.group(2)
+                cur["value"] = _num_value(m.group(2))
+                cur["value_raw"] = tok
+                cur["flag"] = m.group(3) or ""
                 state = "value"
             elif _is_unit(t):
                 cur["unit"] = t
@@ -235,11 +256,11 @@ def parse_labs(text: str) -> list[dict]:
                 state = "range"
             elif _looks_like_name(t):
                 tests.append(cur)
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
             # else: stray junk after a value; ignore
         elif state == "range":
-            r = re.fullmatch(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)", t.replace(" ", ""))
+            r = _RANGE_RE.fullmatch(t.replace(" ", ""))
             if r:
                 if cur is not None:
                     phase = " ".join(
@@ -249,12 +270,12 @@ def parse_labs(text: str) -> list[dict]:
                     cur["ranges"].append({"range": f"{r.group(1)}-{r.group(2)}", "phase": phase})
                 label, low_part = [], None
                 continue
-            m = re.fullmatch(r"(\d+(?:\.\d+)?)-", t.replace(" ", ""))
+            m = _RANGE_LOW_RE.fullmatch(t.replace(" ", ""))
             if m:
                 low_part = m.group(1)
                 continue
             if low_part is not None:
-                n = re.fullmatch(r"(\d+(?:\.\d+)?)", t.replace(" ", ""))
+                n = _RANGE_NUM_RE.fullmatch(t.replace(" ", ""))
                 if n:
                     if cur is not None:
                         phase = " ".join(
@@ -265,6 +286,16 @@ def parse_labs(text: str) -> list[dict]:
                     label, low_part = [], None
                     continue
                 low_part = None
+            s = _RANGE_SINGLE_RE.fullmatch(t.replace(" ", ""))
+            if s:
+                if cur is not None:
+                    phase = " ".join(
+                        w for w in label
+                        if w not in _LABEL_NOISE and not re.fullmatch(r"\d+", w)
+                    ).strip()
+                    cur["ranges"].append({"range": s.group(1), "phase": phase})
+                label = []
+                continue
             if _is_unit(t):
                 if cur is not None:
                     cur["unit"] = t
@@ -273,7 +304,7 @@ def parse_labs(text: str) -> list[dict]:
             elif _looks_like_name(t):
                 if cur is not None:
                     tests.append(cur)
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
                 label, low_part = [], None
             else:
