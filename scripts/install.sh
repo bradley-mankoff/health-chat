@@ -7,10 +7,17 @@ set -euo pipefail
 # - Fetches guideline corpus
 # - Prints next steps for model download + run
 #
-# Usage: bash scripts/install.sh
+# Usage: bash scripts/install.sh [--dev]
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+DEV=0
+for arg in "$@"; do
+  case "$arg" in
+    --dev) DEV=1 ;;
+    *) echo "unknown argument: $arg (usage: bash scripts/install.sh [--dev])" >&2; exit 2 ;;
+  esac
+done
 
 echo "== health-chat installer (macOS/Linux) =="
 echo "root: $ROOT"
@@ -53,22 +60,33 @@ if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 not found — install Python 3.10+ first." >&2
   exit 1
 fi
-
-# venv
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "Python 3.10+ required — found $(python3 --version 2>&1)." >&2
+  exit 1
+fi
+# venv (existing venvs are reused only if their interpreter is 3.10+)
 if [[ ! -d .venv ]]; then
   echo "-> creating .venv"
   python3 -m venv .venv
 fi
-# shellcheck disable=SC1091
-source .venv/bin/activate
-python -m pip install -U pip wheel -q
-echo "-> pip install -e .[dev]"
-pip install -e ".[dev]" -q
+VENV_PY="$ROOT/.venv/bin/python"
+if ! "$VENV_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "existing .venv uses $("$VENV_PY" --version 2>&1) — Python 3.10+ required; delete .venv and re-run." >&2
+  exit 1
+fi
+"$VENV_PY" -m pip install -U pip wheel -q
+if (( DEV )); then
+  echo "-> pip install -e .[dev]"
+  "$VENV_PY" -m pip install -e ".[dev]" -q
+else
+  echo "-> pip install -e ."
+  "$VENV_PY" -m pip install -e . -q
+fi
 
 # guidelines
 if [[ -f resources/manifest.json ]]; then
   echo "-> fetching guidelines (missing only)"
-  python scripts/fetch_guidelines.py || echo "warning: some fetches failed — see output" >&2
+  "$VENV_PY" scripts/fetch_guidelines.py || echo "warning: some fetches failed — see output" >&2
 fi
 
 # llama.cpp check (optional)
