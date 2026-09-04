@@ -160,14 +160,6 @@ if (sub === "ready") {
     operations: [{ op: "set", field: "status", value: "in_review" }],
   });
   console.log(JSON.stringify(out));
-} else if (sub === "done") {
-  const ref = rest[0];
-  if (!ref) throw new Error("done requires ref");
-  const out = await call("piyaz_edit", {
-    task: ref,
-    operations: [{ op: "set", field: "status", value: "done" }],
-  });
-  console.log(JSON.stringify(out));
 } else if (sub === "search") {
   const [project, status] = rest;
   const out = await call("piyaz_search", {
