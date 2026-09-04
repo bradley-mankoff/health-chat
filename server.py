@@ -10,6 +10,7 @@ Env vars:
   PASSCODE   shared secret; if unset, generated and saved to .passcode
 """
 import asyncio
+import heapq
 import json
 import os
 import re
@@ -337,6 +338,20 @@ def build_index() -> dict:
             "guideline_domains": {d: len(g["chunks"]) for d, g in INDEX["guidelines"].items()}}
 
 
+def top_k_relevant(scores, k: int) -> list[int]:
+    """Indices of the top-k positive BM25 scores, best first.
+
+    Shared positive-relevance rule for record retrieval and guideline
+    triage: scores <= 0 carry no lexical signal and must not surface
+    unrelated context. Uses heapq.nlargest to select a small k without
+    fully sorting all scores.
+    """
+    if k <= 0 or len(scores) == 0:
+        return []
+    top = heapq.nlargest(k, range(len(scores)), key=lambda i: scores[i])
+    return [i for i in top if scores[i] > 0]
+
+
 def retrieve(query: str, k: int = TOP_K) -> list[str]:
     if not INDEX["bm25"]:
         return []
@@ -344,8 +359,7 @@ def retrieve(query: str, k: int = TOP_K) -> list[str]:
     if not toks:
         return []
     scores = INDEX["bm25"].get_scores(toks)
-    top = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-    return [INDEX["chunks"][i] for i in top]
+    return [INDEX["chunks"][i] for i in top_k_relevant(scores, k)]
 
 
 # --- Guideline triage: question -> domain(s) -> guideline chunks ------------
@@ -396,23 +410,23 @@ GUIDELINE_SOURCES = {
 
 def triage_guidelines(question: str, k_per_domain: int = 3, k_total: int = 6) -> list[str]:
     q = question.upper()
+    toks = _tokenize(q)
+    if not toks:
+        return []
     domains = {dom for dom, keys in _DOMAIN_KEYWORDS if any(k in q for k in keys)}
     if not domains:
-        domains = set(INDEX.get("guidelines", {}).keys())
+        return []
     hits = []
-    for dom in domains:
+    for dom in sorted(domains):
         g = INDEX.get("guidelines", {}).get(dom)
         if not g or not g["bm25"]:
             continue
-        toks = _tokenize(q)
-        if not toks:
-            continue
         scores = g["bm25"].get_scores(toks)
-        top = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k_per_domain]
-        for i in top:
+        for i in top_k_relevant(scores, k_per_domain):
             hits.append((scores[i], g["chunks"][i]))
-    hits.sort(key=lambda x: -x[0])
-    return [c for _, c in hits[:k_total]]
+    if not hits:
+        return []
+    return [hits[i][1] for i in top_k_relevant([s for s, _ in hits], k_total)]
 
 
 app = FastAPI(title="health-chat")
