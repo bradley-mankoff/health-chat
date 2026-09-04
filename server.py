@@ -162,9 +162,10 @@ _UNITS = {"g/dL", "%", "pg", "fL", "ng/dL", "pg/mL", "nmol/L", "mIU/mL", "mIU/L"
 _LABEL_NOISE = {"Reference", "Range", "or", "=", ">", "<", "Years", "Pregnancy", "Ranges"}
 
 
-# Quest reports use "<0.01", ">150", "1,234", "-5.2" style tokens; the exact
-# reported token is preserved verbatim (comparator + separators included).
-_NUM = r"-?[\d,]*\d(?:\.\d+)?"
+# Quest reports use "<0.01", ">150", "1,234", "-5.2", "+3" style tokens.
+# value holds the plain number (baseline int/float semantics); value_raw
+# preserves the exact reported token including comparator and separators.
+_NUM = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
 _CMP = r"[<>]=?"
 _VALUE_RE = re.compile(rf"({_CMP})?\s*({_NUM})\s*([LH]{{1,2}})?")
 _RANGE_RE = re.compile(rf"((?:{_CMP})?{_NUM})-((?:{_CMP})?{_NUM})")
@@ -173,31 +174,10 @@ _RANGE_NUM_RE = re.compile(rf"((?:{_CMP})?{_NUM})")
 _RANGE_SINGLE_RE = re.compile(rf"({_CMP}{_NUM})")
 
 
-class _LabValue(str):
-    """Exact reported value token that stays == to its plain numeric value.
-
-    "12.3" == 12.3 and "245" == 245 (backward compatible), while "<0.01",
-    "1,234", "-5.2" keep their reported form for display, API, and prompts.
-    Comparator-prefixed tokens never equal a plain number ("<0.01" != 0.01).
-    """
-
-    def __eq__(self, other):
-        if isinstance(other, str):
-            return str(self) == other
-        if isinstance(other, (int, float)) and not isinstance(other, bool):
-            if self[:1] in ("<", ">"):
-                return False
-            try:
-                return float(self.replace(",", "")) == other
-            except ValueError:
-                return False
-        return NotImplemented
-
-    def __ne__(self, other):
-        eq = self.__eq__(other)
-        return eq if eq is NotImplemented else not eq
-
-    __hash__ = str.__hash__
+def _num_value(num: str):
+    """Plain number for a validated numeric token (baseline semantics)."""
+    s = num.replace(",", "")
+    return int(s) if "." not in s else float(s)
 
 
 def _is_unit(t: str) -> bool:
@@ -249,14 +229,14 @@ def parse_labs(text: str) -> list[dict]:
             continue  # patient/ordering header noise before the first panel
         if state == "scan":
             if _looks_like_name(t) and _value_ahead(lines, i + 1):
-                cur = {"name": t, "value": None, "raw": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
         elif state == "name":
             m = _VALUE_RE.fullmatch(t)
             if m:
                 tok = (m.group(1) or "") + m.group(2)
-                cur["value"] = _LabValue(tok)  # exact reported token
-                cur["raw"] = tok
+                cur["value"] = _num_value(m.group(2))
+                cur["value_raw"] = tok
                 cur["flag"] = m.group(3) or ""
                 state = "value"
             elif _is_unit(t):
@@ -274,7 +254,7 @@ def parse_labs(text: str) -> list[dict]:
                 state = "range"
             elif _looks_like_name(t):
                 tests.append(cur)
-                cur = {"name": t, "value": None, "raw": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
             # else: stray junk after a value; ignore
         elif state == "range":
@@ -322,7 +302,7 @@ def parse_labs(text: str) -> list[dict]:
             elif _looks_like_name(t):
                 if cur is not None:
                     tests.append(cur)
-                cur = {"name": t, "value": None, "raw": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
                 label, low_part = [], None
             else:
