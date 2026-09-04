@@ -80,7 +80,7 @@ Unblocked lights-off tickets get claimed. Implementers write code. If the slice 
 
 ### Approval-gated auto-merge (opt-in)
 
-Your only per-ticket act is **approval** — the taste/approval gate no machine can sit. Everything after it is machine labor. With `auto_merge: true` in `factory.json`, each cycle marks draft PRs on in-review tickets ready for review, then merges every PR that carries a human-collaborator approval with no failing checks, and marks its ticket **done**. Without it, merging and the done flip stay yours. The poller never merges on its own judgment: no approval, no merge, no exceptions.
+Your only per-ticket act is **judgment only a human can make** — taste, direction, anything no checklist can settle. Everything after judgment is machine labor. With `auto_merge: true` in `factory.json`, each cycle marks draft PRs on in-review tickets ready for review, then merges every PR with judgment on record and no failing checks, and marks its ticket **done**. Judgment on record means either your approval review, or a fully-checked acceptance checklist where every box was checked with cited evidence. Self-authored PRs cannot be approved on GitHub at all, so the checklist path is what carries machine-verified work home. Without auto-merge, merging and the done flip stay yours. The poller never merges on its own judgment: nothing on record, no merge, no exceptions.
 
 ### When something comes back
 
@@ -90,7 +90,7 @@ Open the draft PR. You are not doing a full code review unless you want to. You 
 2. Is there a test or a machine check that would fail if the story were a lie?
 3. Anything that is actually taste? If yes, it should have been lights-on — bounce it rather than rubber-stamp.
 
-Then: approve the PR. With auto-merge on, the next cycle merges it and marks the ticket **done**; without it, you merge and flip the ticket yourself. Done means you (or QA) *saw* the ACs. Confident prose is not evidence.
+Then: record your judgment. If the work needs taste only you have, approve the PR (or merge it yourself — self-authored PRs cannot be approved on GitHub, but you can always merge). If it is mechanical and fully evidenced, do nothing: the checklist on the ticket already speaks, and the next cycle merges it and marks it **done**. Without auto-merge, you merge and flip the ticket yourself. Done means judgment is on record with evidence. Confident prose is not evidence.
 
 **Lights-on tickets:** you stay in the session. The factory will not claim them. You are the criterion.
 
