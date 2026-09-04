@@ -8,7 +8,7 @@
 bash scripts/install.sh
 ```
 
-What it does: creates `.venv`, `pip install -e .` (`.venv/bin/python -m pip install -e .[dev]` with `--dev`), fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+.
+What it does: creates `.venv` (reuses an existing one only if its interpreter is 3.10+), `pip install -e .`, fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+. Unknown installer arguments are rejected. Developers: `bash scripts/install.sh --dev` (POSIX) or `powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev` (Windows) to include the pytest suite.
 
 Then:
 

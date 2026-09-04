@@ -11,6 +11,13 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+DEV=0
+for arg in "$@"; do
+  case "$arg" in
+    --dev) DEV=1 ;;
+    *) echo "unknown argument: $arg (usage: bash scripts/install.sh [--dev])" >&2; exit 2 ;;
+  esac
+done
 
 echo "== health-chat installer (macOS/Linux) =="
 echo "root: $ROOT"
@@ -57,15 +64,18 @@ if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)';
   echo "Python 3.10+ required — found $(python3 --version 2>&1)." >&2
   exit 1
 fi
-
-# venv
+# venv (existing venvs are reused only if their interpreter is 3.10+)
 if [[ ! -d .venv ]]; then
   echo "-> creating .venv"
   python3 -m venv .venv
 fi
 VENV_PY="$ROOT/.venv/bin/python"
+if ! "$VENV_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+  echo "existing .venv uses $("$VENV_PY" --version 2>&1) — Python 3.10+ required; delete .venv and re-run." >&2
+  exit 1
+fi
 "$VENV_PY" -m pip install -U pip wheel -q
-if [[ "${1:-}" == "--dev" ]]; then
+if (( DEV )); then
   echo "-> pip install -e .[dev]"
   "$VENV_PY" -m pip install -e ".[dev]" -q
 else
