@@ -5,6 +5,7 @@ llama.cpp's OpenAI-compatible API (llama-server on :8080 by default).
 Env vars:
   DATA_DIR   folder of records (default: ./data next to server.py)
   LLM_URL    llama-server base URL (default: http://127.0.0.1:8080)
+  LLM_MODEL  model id sent to the LLM API (default: probe /v1/models)
   HOST       listen host (default: 127.0.0.1 — loopback only)
   PORT       listen port (default: 8787)
   PASSCODE   shared secret; if unset, generated and saved to .passcode
@@ -44,11 +45,14 @@ if not PASSCODE:
         os.chmod(_passcode_file, 0o600)
     except Exception:
         pass  # best-effort on platforms without chmod
-# Loaded-model id from llama-server (fall back to "" if unreachable).
-try:
-    MODEL = httpx.get(f"{LLM_URL}/v1/models", timeout=5).json()["data"][0]["id"]
-except Exception:
-    MODEL = ""
+# Loaded-model id: LLM_MODEL wins (multi-model servers route on the id);
+# otherwise probe llama-server, fall back to "" if unreachable.
+MODEL = os.environ.get("LLM_MODEL", "").strip()
+if not MODEL:
+    try:
+        MODEL = httpx.get(f"{LLM_URL}/v1/models", timeout=5).json()["data"][0]["id"]
+    except Exception:
+        MODEL = ""
 
 SYSTEM_TEMPLATE = """You are a health-records assistant. The patient's medical records are below.
 STRUCTURED RECORDS (machine-parsed from the source PDFs; authoritative for exact values, units, reference ranges, and flags):
