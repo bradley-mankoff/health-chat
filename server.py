@@ -10,18 +10,20 @@ Env vars:
   PASSCODE   shared secret; if unset, generated and saved to .passcode
 """
 import asyncio
+import heapq
 import json
 import os
 import re
 import secrets
 from pathlib import Path
+from typing import Literal
 
 import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pypdf import PdfReader
 from rank_bm25 import BM25Okapi
 from starlette.datastructures import UploadFile as StarletteUploadFile
@@ -140,7 +142,9 @@ def parse_meta(text: str) -> dict:
 
 
 # --- Deterministic lab-panel parser (Quest Diagnostics layout) -------------
-# Extracts {name, value, unit, flag, ranges[]} without any LLM. Anything the
+# Extracts {name, value, raw, unit, flag, ranges[]} without any LLM. `value`
+# is the exact reported token ("<0.01", "1,234"); `raw` is the same token
+# as a plain str for downstream consumers. Anything the
 # parser misses is still covered by the raw text chunks in the prompt.
 
 _SKIP_LINES = {
@@ -158,6 +162,24 @@ _UNITS = {"g/dL", "%", "pg", "fL", "ng/dL", "pg/mL", "nmol/L", "mIU/mL", "mIU/L"
 # (Follicular, Luteal, Mid-cycle, Postmenopausal, Phase, Peak, First/Second/
 # Third trimester) are kept — they are meaningful label content.
 _LABEL_NOISE = {"Reference", "Range", "or", "=", ">", "<", "Years", "Pregnancy", "Ranges"}
+
+
+# Quest reports use "<0.01", ">150", "1,234", "-5.2", "+3" style tokens.
+# value holds the plain number (baseline int/float semantics); value_raw
+# preserves the exact reported token including comparator and separators.
+_NUM = r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+_CMP = r"[<>]=?"
+_VALUE_RE = re.compile(rf"({_CMP})?\s*({_NUM})\s*([LH]{{1,2}})?")
+_RANGE_RE = re.compile(rf"((?:{_CMP})?{_NUM})-((?:{_CMP})?{_NUM})")
+_RANGE_LOW_RE = re.compile(rf"((?:{_CMP})?{_NUM})-")
+_RANGE_NUM_RE = re.compile(rf"((?:{_CMP})?{_NUM})")
+_RANGE_SINGLE_RE = re.compile(rf"({_CMP}{_NUM})")
+
+
+def _num_value(num: str):
+    """Plain number for a validated numeric token (baseline semantics)."""
+    s = num.replace(",", "")
+    return int(s) if "." not in s else float(s)
 
 
 def _is_unit(t: str) -> bool:
@@ -180,7 +202,7 @@ def _looks_like_name(t: str) -> bool:
 def _value_ahead(lines: list[str], start: int) -> bool:
     """A real test name is followed by its value within a few lines."""
     for j in range(start, min(start + 6, len(lines))):
-        if re.fullmatch(r"\d+(?:\.\d+)?\s*[LH]{0,2}", lines[j].strip()):
+        if _VALUE_RE.fullmatch(lines[j].strip()):
             return True
     return False
 
@@ -209,14 +231,15 @@ def parse_labs(text: str) -> list[dict]:
             continue  # patient/ordering header noise before the first panel
         if state == "scan":
             if _looks_like_name(t) and _value_ahead(lines, i + 1):
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
         elif state == "name":
-            m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([LH]{1,2})?", t)
+            m = _VALUE_RE.fullmatch(t)
             if m:
-                raw = m.group(1)
-                cur["value"] = int(raw) if "." not in raw else float(raw)  # exact token form
-                cur["flag"] = m.group(2) or ""
+                tok = (m.group(1) or "") + m.group(2)
+                cur["value"] = _num_value(m.group(2))
+                cur["value_raw"] = tok
+                cur["flag"] = m.group(3) or ""
                 state = "value"
             elif _is_unit(t):
                 cur["unit"] = t
@@ -233,11 +256,11 @@ def parse_labs(text: str) -> list[dict]:
                 state = "range"
             elif _looks_like_name(t):
                 tests.append(cur)
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
             # else: stray junk after a value; ignore
         elif state == "range":
-            r = re.fullmatch(r"(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)", t.replace(" ", ""))
+            r = _RANGE_RE.fullmatch(t.replace(" ", ""))
             if r:
                 if cur is not None:
                     phase = " ".join(
@@ -247,12 +270,12 @@ def parse_labs(text: str) -> list[dict]:
                     cur["ranges"].append({"range": f"{r.group(1)}-{r.group(2)}", "phase": phase})
                 label, low_part = [], None
                 continue
-            m = re.fullmatch(r"(\d+(?:\.\d+)?)-", t.replace(" ", ""))
+            m = _RANGE_LOW_RE.fullmatch(t.replace(" ", ""))
             if m:
                 low_part = m.group(1)
                 continue
             if low_part is not None:
-                n = re.fullmatch(r"(\d+(?:\.\d+)?)", t.replace(" ", ""))
+                n = _RANGE_NUM_RE.fullmatch(t.replace(" ", ""))
                 if n:
                     if cur is not None:
                         phase = " ".join(
@@ -263,6 +286,16 @@ def parse_labs(text: str) -> list[dict]:
                     label, low_part = [], None
                     continue
                 low_part = None
+            s = _RANGE_SINGLE_RE.fullmatch(t.replace(" ", ""))
+            if s:
+                if cur is not None:
+                    phase = " ".join(
+                        w for w in label
+                        if w not in _LABEL_NOISE and not re.fullmatch(r"\d+", w)
+                    ).strip()
+                    cur["ranges"].append({"range": s.group(1), "phase": phase})
+                label = []
+                continue
             if _is_unit(t):
                 if cur is not None:
                     cur["unit"] = t
@@ -271,7 +304,7 @@ def parse_labs(text: str) -> list[dict]:
             elif _looks_like_name(t):
                 if cur is not None:
                     tests.append(cur)
-                cur = {"name": t, "value": None, "unit": None, "flag": "", "ranges": []}
+                cur = {"name": t, "value": None, "value_raw": None, "unit": None, "flag": "", "ranges": []}
                 state = "name"
                 label, low_part = [], None
             else:
@@ -336,6 +369,20 @@ def build_index() -> dict:
             "guideline_domains": {d: len(g["chunks"]) for d, g in INDEX["guidelines"].items()}}
 
 
+def top_k_relevant(scores, k: int) -> list[int]:
+    """Indices of the top-k positive BM25 scores, best first.
+
+    Shared positive-relevance rule for record retrieval and guideline
+    triage: scores <= 0 carry no lexical signal and must not surface
+    unrelated context. Uses heapq.nlargest to select a small k without
+    fully sorting all scores.
+    """
+    if k <= 0 or len(scores) == 0:
+        return []
+    top = heapq.nlargest(k, range(len(scores)), key=lambda i: scores[i])
+    return [i for i in top if scores[i] > 0]
+
+
 def retrieve(query: str, k: int = TOP_K) -> list[str]:
     if not INDEX["bm25"]:
         return []
@@ -343,8 +390,7 @@ def retrieve(query: str, k: int = TOP_K) -> list[str]:
     if not toks:
         return []
     scores = INDEX["bm25"].get_scores(toks)
-    top = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k]
-    return [INDEX["chunks"][i] for i in top]
+    return [INDEX["chunks"][i] for i in top_k_relevant(scores, k)]
 
 
 # --- Guideline triage: question -> domain(s) -> guideline chunks ------------
@@ -395,23 +441,23 @@ GUIDELINE_SOURCES = {
 
 def triage_guidelines(question: str, k_per_domain: int = 3, k_total: int = 6) -> list[str]:
     q = question.upper()
+    toks = _tokenize(q)
+    if not toks:
+        return []
     domains = {dom for dom, keys in _DOMAIN_KEYWORDS if any(k in q for k in keys)}
     if not domains:
-        domains = set(INDEX.get("guidelines", {}).keys())
+        return []
     hits = []
-    for dom in domains:
+    for dom in sorted(domains):
         g = INDEX.get("guidelines", {}).get(dom)
         if not g or not g["bm25"]:
             continue
-        toks = _tokenize(q)
-        if not toks:
-            continue
         scores = g["bm25"].get_scores(toks)
-        top = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:k_per_domain]
-        for i in top:
+        for i in top_k_relevant(scores, k_per_domain):
             hits.append((scores[i], g["chunks"][i]))
-    hits.sort(key=lambda x: -x[0])
-    return [c for _, c in hits[:k_total]]
+    if not hits:
+        return []
+    return [hits[i][1] for i in top_k_relevant([s for s, _ in hits], k_total)]
 
 
 app = FastAPI(title="health-chat")
@@ -442,9 +488,20 @@ def _safe_filename(name: str) -> str:
     return safe
 
 
+MAX_HISTORY = 8
+MAX_HISTORY_CHARS = 4000
+
+
+class HistoryEntry(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=MAX_HISTORY_CHARS, strict=True)
+
+
 class ChatIn(BaseModel):
     question: str
-    history: list[dict] = []
+    history: list[HistoryEntry] = Field(default=[], max_length=MAX_HISTORY)
 
 
 @app.get("/")
@@ -614,13 +671,21 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
                 seen_gl.add(m.group(1))
                 name, url = GUIDELINE_SOURCES[m.group(1)]
                 gl_used.append({"name": name, "url": url, "file": m.group(1)})
+        history_msgs = []
+        for m in body.history[-MAX_HISTORY:]:
+            if isinstance(m, HistoryEntry):
+                history_msgs.append({"role": m.role, "content": m.content})
+            elif isinstance(m, dict) and m.get("role") in ("user", "assistant"):
+                c = m.get("content")
+                if isinstance(c, str) and 1 <= len(c) <= MAX_HISTORY_CHARS:
+                    history_msgs.append({"role": m["role"], "content": c})
         messages = [
             {"role": "system", "content": SYSTEM_TEMPLATE.format(
                 structured=INDEX["structured"] or "(no structured data available)",
                 context="\n\n".join(ctx),
                 guidelines="\n\n".join(guideline_chunks) or "(no guidelines matched)",
             )},
-            *body.history[-8:],
+            *history_msgs,
             {"role": "user", "content": body.question},
         ]
         effort_raw = os.environ.get("REASONING_EFFORT")

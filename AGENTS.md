@@ -12,7 +12,7 @@ cd health-chat
 bash scripts/install.sh
 
 # 2) Fetch guidelines (already run by install; re-run to update missing only)
-python scripts/fetch_guidelines.py
+.venv/bin/python scripts/fetch_guidelines.py
 
 # 3) model download — Qwen3.8-27B Q4_K_M GGUF (~16.5 GB on disk, ~18 GB resident at 8192 context, needs 32GB RAM — see docs/MODELS.md)
 mkdir -p models
@@ -26,7 +26,7 @@ llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --hos
 # 5) Run app
 mkdir -p data
 # put lab PDFs in ./data or set DATA_DIR elsewhere
-DATA_DIR=./data python server.py
+DATA_DIR=./data .venv/bin/python server.py
 # open http://127.0.0.1:8787 — passcode printed on start, also in .passcode
 ```
 

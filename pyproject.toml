@@ -27,7 +27,12 @@ Repository = "https://github.com/bradley-mankoff/health-chat"
 dev = ["pytest>=8", "pytest-asyncio"]
 
 [tool.setuptools]
-py_modules = ["server"]
+py-modules = ["server"]
+packages = ["static", "resources"]
+
+[tool.setuptools.package-data]
+static = ["*"]
+resources = ["*.json"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

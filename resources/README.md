@@ -6,7 +6,7 @@
 2. On first install, run:
 
 ```bash
-python scripts/fetch_guidelines.py
+.venv/bin/python scripts/fetch_guidelines.py
 ```
 
 That downloads each URL to `resources/<domain>/<file>` on your machine.

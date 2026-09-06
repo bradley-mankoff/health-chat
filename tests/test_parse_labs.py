@@ -298,3 +298,57 @@ def test_parse_labs_fixture_quest_sample():
     assert wbc["unit"] == "Thousand/uL"
     rbc = next(t for t in out if "RED BLOOD" in t["name"])
     assert rbc["unit"] == "Million/uL"
+
+
+# --- HCH-6 value-semantics contracts ---
+
+def _one_value_block(name, value_line):
+    return f"""
+Analyte
+Value
+Reference Range:
+
+{name}
+{value_line}
+g/dL
+Reference Range:
+1.0-99.0
+g/dL
+"""
+
+
+def test_value_keeps_plain_number_types():
+    cases = [
+        ("T1", "4.5", 4.5, "4.5"),
+        ("T2", "245", 245, "245"),
+        ("T3", "1,234", 1234, "1,234"),
+        ("T4", "-5.2", -5.2, "-5.2"),
+        ("T5", "+3", 3, "+3"),
+        ("T6", "<0.01", 0.01, "<0.01"),
+        ("T7", ">150", 150, ">150"),
+    ]
+    for name, line, want_value, want_raw in cases:
+        out = parse_labs(_one_value_block(name, line))
+        row = next((t for t in out if t["name"] == name), None)
+        assert row is not None, f"{name} ({line!r}) not parsed"
+        assert row["value"] == want_value, f"{name}: {row['value']!r}"
+        assert row["value_raw"] == want_raw, f"{name}: {row['value_raw']!r}"
+    assert isinstance(parse_labs(_one_value_block("T2", "245"))[0]["value"], int)
+    assert isinstance(parse_labs(_one_value_block("T1", "4.5"))[0]["value"], float)
+
+
+def test_value_malformed_commas_rejected():
+    for bad in ["1,2", "12,34", "1,2345", "1,23,456", "1,234,56"]:
+        out = parse_labs(_one_value_block("BAD", bad))
+        row = next((t for t in out if t["name"] == "BAD"), None)
+        assert row is None or row["value"] is None, f"{bad!r} accepted as {row}"
+
+
+def test_values_serialize_as_json_numbers():
+    import json
+
+    out = parse_labs(_one_value_block("T1", "4.5") + _one_value_block("T2", "1,234"))
+    doc = json.loads(json.dumps({"labs": out}))
+    by_name = {t["name"]: t for t in doc["labs"]}
+    assert by_name["T1"]["value"] == 4.5 and isinstance(by_name["T1"]["value"], float)
+    assert by_name["T2"]["value"] == 1234 and isinstance(by_name["T2"]["value"], int)
