@@ -463,6 +463,18 @@ def triage_guidelines(question: str, k_per_domain: int = 3, k_total: int = 6) ->
 app = FastAPI(title="health-chat")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
+CSP = ("default-src 'self'; script-src 'self'; "
+       "style-src 'self' 'unsafe-inline'; "
+       "connect-src 'self' http://127.0.0.1:8080 http://127.0.0.1:8787; "
+       "img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'self'")
+
+
+@app.middleware("http")
+async def _csp(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers["Content-Security-Policy"] = CSP
+    return resp
+
 
 def check_auth(request: Request) -> None:
     h = request.headers.get("Authorization", "")
