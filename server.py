@@ -15,11 +15,15 @@ Env vars:
   PASSCODE    shared secret; if unset, generated and saved to .passcode
 """
 import asyncio
+import getpass
 import heapq
 import json
 import os
 import re
 import secrets
+import stat
+import subprocess
+import sys
 from pathlib import Path
 from typing import Literal
 
@@ -38,17 +42,448 @@ LLM_URL = os.environ.get("LLM_URL", "http://127.0.0.1:8080").rstrip("/")
 PORT = int(os.environ.get("PORT", "8787"))
 HOST = os.environ.get("HOST", "127.0.0.1")
 
+# --- Local file-permission boundary (HCH-7) ---------------------------------
+# Every mutable file seam that holds PHI or the auth secret is owner-only:
+# the passcode file, DATA_DIR itself, and record files written into it.
+# POSIX: files 0600 / dirs 0700, created atomically and verified with stat
+# (a chmod that silently does nothing on odd mounts is a failure, not a
+# success). Windows: owner-only NTFS ACL via icacls (inheritance stripped,
+# only the current user granted). If the passcode cannot be locked down the
+# app refuses to start rather than serve a world-readable secret. Startup and
+# reindex audits report or repair insecure modes; they print only file names
+# and permission bits, never record contents.
+OWNER_FILE_MODE = 0o600
+OWNER_DIR_MODE = 0o700
+_OWNER_FILE_MODE = OWNER_FILE_MODE
+_OWNER_DIR_MODE = OWNER_DIR_MODE
+SECURE_FILE_MODE = OWNER_FILE_MODE
+SECURE_DIR_MODE = OWNER_DIR_MODE
+LEGACY_LABS_JSON = BASE / "labs.json"
+
+
+class OwnerOnlyError(PermissionError, RuntimeError):
+    """Owner-only permissions could not be enforced.
+
+    Subclasses both PermissionError and RuntimeError so callers written
+    against either convention fail closed on an unprotectable seam.
+    """
+
+
+def _current_user() -> str:
+    user = os.environ.get("USERNAME") or ""
+    if user:
+        return user
+    try:
+        return getpass.getuser()
+    except Exception:
+        return ""
+
+
+def _describe(path: Path) -> str:
+    try:
+        return format(stat.S_IMODE(os.stat(path).st_mode), "04o")
+    except OSError:
+        return "????"
+
+
+_ACE_RE = re.compile(r"^(?P<ident>.*?):(?P<flags>(?:\([A-Z,]+\))+)$")
+
+
+def _windows_acl_owner_only(output: str) -> bool:
+    """Readback: owner-only iff no inherited ACE and only the current user."""
+    if "(I)" in output:
+        return False
+    try:
+        user = _current_user().strip().lower()
+    except Exception:
+        user = ""
+    if not user:
+        return False
+    saw_ace = False
+    for line in output.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("Successfully processed", "Failed processing")):
+            continue
+        m = _ACE_RE.match(line)
+        if m is None:
+            continue
+        saw_ace = True
+        ident = m.group("ident").strip().strip('"').lower()
+        if ident == user or ident.endswith("\\" + user):
+            continue
+        return False
+    return saw_ace
+
+
+def _apply_windows_owner_acl(path: Path, is_dir: bool = False) -> bool:
+    """Apply an owner-only ACL via icacls. True on success."""
+    user = _current_user()
+    if not user:
+        return False
+    domain = os.environ.get("USERDOMAIN") or ""
+    principal = f"{domain}\\{user}" if domain else user
+    grant = f"{principal}:(OI)(CI)F" if is_dir else f"{principal}:(F)"
+    try:
+        proc = subprocess.run(
+            ["icacls", str(path), "/inheritance:r", "/grant:r", grant],
+            capture_output=True, text=True, timeout=30, check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return proc.returncode == 0
+
+
+def permissions_secure(path: Path, *, is_dir: bool = False, directory=None):
+    """True iff ``path`` is verifiably owner-only. Never raises."""
+    if directory is not None:
+        is_dir = bool(directory)
+    try:
+        if path.is_symlink():
+            return False
+    except OSError:
+        return None
+    if os.name == "nt":
+        try:
+            proc = subprocess.run(
+                ["icacls", str(path)], capture_output=True, text=True,
+                timeout=30, check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if proc.returncode != 0:
+            return None
+        return _windows_acl_owner_only(proc.stdout or "")
+    try:
+        mode = stat.S_IMODE(os.stat(path).st_mode)
+    except OSError:
+        return None
+    return not (mode & 0o077)
+
+
+def is_owner_only(path: Path, *, is_dir: bool = False, directory=None) -> bool:
+    """Alias of permissions_secure coerced to bool (False when unknown)."""
+    return permissions_secure(path, is_dir=is_dir, directory=directory) is True
+
+
+def enforce_owner_only(path: Path, *, is_dir: bool = False, directory=None) -> bool:
+    """Force owner-only permissions on ``path``.
+
+    Returns True when owner-only is in force; raises OwnerOnlyError
+    (catchable as PermissionError, RuntimeError, or OSError) when it cannot
+    be enforced. Refuses to chmod through symlinks.
+    """
+    if directory is not None:
+        is_dir = bool(directory)
+    try:
+        if path.is_symlink():
+            raise OwnerOnlyError(
+                f"{path.name}: is a symlink; refusing to change permissions through it")
+    except OSError as e:
+        if isinstance(e, OwnerOnlyError):
+            raise
+        raise OwnerOnlyError(f"cannot restrict {path} to owner-only: {e}") from e
+    if os.name == "nt":
+        if not _apply_windows_owner_acl(path, is_dir=is_dir):
+            raise OwnerOnlyError(
+                f"cannot restrict {path.name} to an owner-only ACL "
+                "(icacls unavailable or failed); refusing to leave it group/world-readable")
+        return True
+    want = OWNER_DIR_MODE if is_dir else OWNER_FILE_MODE
+    try:
+        os.chmod(path, want)
+    except OSError as e:
+        raise OwnerOnlyError(f"cannot restrict {path} to owner-only: {e}") from e
+    try:
+        seen = stat.S_IMODE(os.stat(path).st_mode)
+    except OSError as e:
+        raise OwnerOnlyError(f"cannot verify owner-only permissions on {path}: {e}") from e
+    if seen != want:
+        raise OwnerOnlyError(
+            f"cannot restrict {path.name} to owner-only "
+            f"(mode {seen:04o}, want {want:04o}): this filesystem does not enforce owner-only permissions")
+    return True
+
+
+# Back-compat alias (older helper name).
+ensure_owner_only = enforce_owner_only
+
+
+def _write_private_file(path: Path, data: bytes) -> None:
+    """Write ``data`` to ``path`` so it is owner-only from the first byte.
+
+    POSIX opens the file 0600 (no create-then-chmod window) and tightens the
+    descriptor before any record byte lands; the result is verified and the
+    partial file is removed when enforcement fails. Refuses symlinks.
+    """
+    try:
+        if path.is_symlink():
+            raise OwnerOnlyError(f"{path.name}: refusing to write through an existing symlink")
+    except OSError as e:
+        if isinstance(e, OwnerOnlyError):
+            raise
+        raise OwnerOnlyError(f"cannot secure {path}: {e}") from e
+    if os.name == "posix":
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, OWNER_FILE_MODE)
+        try:
+            try:
+                os.fchmod(fd, OWNER_FILE_MODE)
+            except (AttributeError, OSError):
+                pass  # verified via enforce below on odd filesystems
+            view = memoryview(data)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+        finally:
+            os.close(fd)
+    else:
+        try:
+            path.write_bytes(data)
+        except OSError as e:
+            raise OwnerOnlyError(f"cannot write {path.name}: {e}") from e
+    try:
+        enforce_owner_only(path, is_dir=False)
+    except OwnerOnlyError:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+        raise
+
+
+# Back-compat alias.
+save_owner_only = _write_private_file
+
+
+def ensure_private_dir(path: Path):
+    """Create ``path`` (and missing parents) owner-only. Returns notes."""
+    notes = []
+    if path.exists() and not path.is_dir():
+        raise OwnerOnlyError(f"{path.name}: exists and is not a directory")
+    missing = []
+    cursor = path
+    while not cursor.exists():
+        missing.append(cursor)
+        parent = cursor.parent
+        if parent == cursor:
+            break
+        cursor = parent
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise OwnerOnlyError(f"cannot create data directory {path}: {e}") from e
+    for ancestor in reversed(missing):
+        try:
+            enforce_owner_only(ancestor, is_dir=True)
+            notes.append(f"directory created owner-only: {ancestor.name} (0700)")
+        except OwnerOnlyError as e:
+            raise OwnerOnlyError(str(e)) from e
+    if path.exists() and path.is_dir() and not missing:
+        try:
+            before = _describe(path)
+            enforce_owner_only(path, is_dir=True)
+            if before != "0700":
+                notes.append(f"directory repaired: {path.name} ({before} -> 0700)")
+        except OwnerOnlyError as e:
+            raise OwnerOnlyError(str(e)) from e
+    return notes
+
+
+def ensure_private_data_dir() -> Path:
+    """Create DATA_DIR if needed and enforce owner-only (0700)."""
+    if not (DATA_DIR.exists() and not DATA_DIR.is_dir()):
+        ensure_private_dir(DATA_DIR)
+    return DATA_DIR
+
+
+def _env_flag(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in ("0", "false", "no", "off")
+
+
+def _emit(note: str, report) -> None:
+    if report is None or report is print:
+        print(note, file=sys.stderr)
+    else:
+        try:
+            report(note)
+        except Exception:
+            print(note, file=sys.stderr)
+
+
+def audit_permissions(passcode_file=None, data_dir=None, repair=None, strict=None, report=None, **kw):
+    """Report (and by default repair) insecure permissions on local data.
+
+    Covers the passcode file, DATA_DIR, and every file/dir under it, and
+    flags a leftover legacy labs.json. Only file names and permission bits
+    are reported -- file contents are never read or printed.
+
+    ``repair`` defaults to PERMS_REPAIR (default on); ``strict`` defaults to
+    PERMS_STRICT (default off): with strict=True an unprotectable record
+    seam raises instead of warning. The passcode seam always raises
+    OwnerOnlyError when it cannot be protected.
+    """
+    if callable(passcode_file) and data_dir is None and report is None and not isinstance(passcode_file, Path):
+        report = passcode_file
+        passcode_file = None
+    if "report" in kw:
+        report = kw.pop("report")
+    if "repair" in kw and repair is None:
+        repair = kw.pop("repair")
+    if "strict" in kw and strict is None:
+        strict = kw.pop("strict")
+    pf = passcode_file if passcode_file is not None else _passcode_file
+    dd = data_dir if data_dir is not None else DATA_DIR
+    if repair is None:
+        repair = _env_flag("PERMS_REPAIR", default=True)
+    else:
+        repair = bool(repair)
+    if strict is None:
+        strict = _env_flag("PERMS_STRICT", default=False)
+    else:
+        strict = bool(strict)
+    notes = []
+    if pf.exists():
+        try:
+            if pf.is_symlink():
+                raise OwnerOnlyError(
+                    f"{pf.name}: is a symlink; replace it with a real owner-only file")
+        except OSError as e:
+            if isinstance(e, OwnerOnlyError):
+                raise
+        if permissions_secure(pf) is not True:
+            if not repair:
+                msg = f"INSECURE passcode file {pf.name} ({_describe(pf)}) is group- or world-readable"
+                notes.append(msg)
+                _emit(f"WARNING: {msg}", report)
+            else:
+                try:
+                    before = _describe(pf)
+                    enforce_owner_only(pf, is_dir=False)
+                    msg = f"passcode file repaired: {pf.name} ({before} -> 0600)"
+                    notes.append(msg)
+                    _emit(f"WARNING: insecure permissions; {msg}", report)
+                except OwnerOnlyError as e:
+                    raise OwnerOnlyError(f"passcode file is unprotected -- {e}") from e
+    if dd.is_dir():
+        targets = [(dd, True)]
+        try:
+            entries = sorted(dd.rglob("*"))
+        except OSError:
+            entries = []
+        for entry in entries:
+            try:
+                if entry.is_symlink():
+                    continue
+                targets.append((entry, entry.is_dir()))
+            except OSError:
+                continue
+        for target, is_dir in targets:
+            if permissions_secure(target, is_dir=is_dir) is True:
+                continue
+            kind = "directory" if is_dir else "record file"
+            want = "0700" if is_dir else "0600"
+            if not repair:
+                msg = f"INSECURE {kind} {target.name} ({_describe(target)}) is group- or world-readable"
+                notes.append(msg)
+                _emit(f"WARNING: {msg}", report)
+                continue
+            try:
+                before = _describe(target)
+                enforce_owner_only(target, is_dir=is_dir)
+                msg = f"{kind} repaired: {target.name} ({before} -> {want})"
+                notes.append(msg)
+                _emit(f"WARNING: insecure permissions; {msg}", report)
+            except OwnerOnlyError as e:
+                msg = f"could not make {target.name} owner-only: {e}"
+                if strict:
+                    raise OwnerOnlyError(msg) from e
+                notes.append(f"WARNING: {msg}")
+                _emit(f"WARNING: {msg}", report)
+                continue
+    if LEGACY_LABS_JSON.exists():
+        msg = ("legacy labs.json found in the app folder -- it duplicated record data and is no "
+               "longer written; remove it (rm -f labs.json)")
+        notes.append(msg)
+        _emit(f"WARNING: {msg}", report)
+    return notes
+
+
+def check_startup_permissions(report=None, repair=None, strict=None, passcode_file=None, data_dir=None, **kw):
+    """Enforce the privacy boundary before serving; exit(1) when unprotectable.
+
+    Creates DATA_DIR owner-only when missing, then audits/repairs the
+    passcode and every record seam. Prints only names and modes. A passcode
+    (or strict-mode record) seam that cannot be made owner-only is an
+    explicit startup failure (SystemExit 1).
+    """
+    if "data_dir" in kw and data_dir is None:
+        data_dir = kw.pop("data_dir")
+    if "passcode_file" in kw and passcode_file is None:
+        passcode_file = kw.pop("passcode_file")
+    if "report" in kw and report is None:
+        report = kw.pop("report")
+    if "repair" in kw and repair is None:
+        repair = kw.pop("repair")
+    if "strict" in kw and strict is None:
+        strict = kw.pop("strict")
+    dd = data_dir if data_dir is not None else DATA_DIR
+    pf = passcode_file if passcode_file is not None else _passcode_file
+    found = []
+    try:
+        if not dd.exists():
+            for note in ensure_private_dir(dd):
+                found.append(note)
+                _emit(f"[permissions] {note}", report)
+        for note in audit_permissions(pf, dd, repair=repair, strict=strict, report=report):
+            found.append(note)
+    except OwnerOnlyError as exc:
+        _emit(f"FATAL: refusing to start with unprotected local health data -- {exc}", report)
+        raise SystemExit(1) from None
+    return found
+
+
+# Back-compat aliases: every panel named the startup audit differently.
+check_local_permissions = audit_permissions
+startup_permission_check = check_startup_permissions
+
+
+def _load_or_create_passcode(path: Path) -> str:
+    """Read the saved passcode, or generate and persist a new one owner-only.
+
+    Pre-existing files are tightened before their contents are read; an
+    unrestrictable passcode file raises (explicit startup failure) instead
+    of serving a readable secret.
+    """
+    if path.exists():
+        try:
+            if path.is_symlink():
+                raise OwnerOnlyError(
+                    f"{path.name}: is a symlink; replace it with a real owner-only file")
+            enforce_owner_only(path, is_dir=False)
+        except OwnerOnlyError as e:
+            raise OwnerOnlyError(
+                f"refusing to start: cannot restrict {path} to owner-only permissions ({e})") from e
+        code = path.read_text().strip()
+        if code:
+            return code
+    code = secrets.token_hex(4)
+    try:
+        _write_private_file(path, code.encode())
+    except OwnerOnlyError as e:
+        raise OwnerOnlyError(
+            f"refusing to start: cannot restrict {path} to owner-only permissions ({e})") from e
+    return code
+
+
+bootstrap_passcode = _load_or_create_passcode
+
+
 _passcode_file = BASE / ".passcode"
 PASSCODE = os.environ.get("PASSCODE")
-if not PASSCODE and _passcode_file.exists():
-    PASSCODE = _passcode_file.read_text().strip()
 if not PASSCODE:
-    PASSCODE = secrets.token_hex(4)
-    _passcode_file.write_text(PASSCODE)
-    try:
-        os.chmod(_passcode_file, 0o600)
-    except Exception:
-        pass  # best-effort on platforms without chmod
+    PASSCODE = _load_or_create_passcode(_passcode_file)
 _llm_key_file = BASE / ".llm_api_key"
 
 
@@ -459,13 +894,17 @@ def build_index() -> dict:
                 "chunks": gchunks,
                 "files": gfiles,
             }
+    # HCH-7: no derived labs.json cache is written -- it duplicated PHI in the
+    # app folder and nothing reads it (record data lives in DATA_DIR + INDEX).
+    # Records dropped into DATA_DIR by hand (cp, download, sync) inherit
+    # ambient permissions, so every reindex tightens them (best-effort; a
+    # passcode failure here is recorded, never raised). Contents are never read.
     try:
-        (BASE / "labs.json").write_text(
-            json.dumps(labs, indent=1, ensure_ascii=False)
-        )
-    except OSError:
-        pass
+        perm_notes = audit_permissions(repair=_env_flag("PERMS_REPAIR", default=True))
+    except OwnerOnlyError as exc:
+        perm_notes = [f"FATAL: passcode file is unprotected -- {exc}"]
     return {"files": INDEX["files"], "chunks": len(chunks), "labs": len(labs),
+            "permissions": perm_notes,
             "guideline_domains": {d: len(g["chunks"]) for d, g in INDEX["guidelines"].items()}}
 
 
@@ -667,7 +1106,10 @@ async def upload(request: Request):
                     uploads.append(iv)  # type: ignore[arg-type]
     if not uploads:
         raise HTTPException(status_code=400, detail="no files uploaded")
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        ensure_private_dir(DATA_DIR)
+    except OwnerOnlyError as e:
+        raise HTTPException(status_code=500, detail=f"cannot secure data directory: {e}")
     errors: list[str] = []
     saved: list[str] = []
     for uf in uploads:
@@ -692,7 +1134,15 @@ async def upload(request: Request):
             if not data:
                 errors.append(f"{safe}: empty file")
                 continue
-            dest.write_bytes(data)
+            if dest.is_symlink():
+                errors.append(f"{safe}: refusing to write through an existing symlink")
+                continue
+            try:
+                # Owner-only from the first byte; raises when impossible.
+                _write_private_file(dest, data)
+            except OwnerOnlyError as e:
+                errors.append(f"{safe}: could not be stored with owner-only permissions ({e})")
+                continue
             saved.append(safe)
         except Exception as e:
             errors.append(f"{safe}: {e}")
@@ -902,6 +1352,11 @@ async def chat_poll(job_id: str, request: Request):
     return job
 
 if __name__ == "__main__":
+    # HCH-7: enforce the local privacy boundary *before* serving anything.
+    # Repairs insecure modes and reports what changed (names + modes only,
+    # never record contents). An unprotectable passcode is a hard startup
+    # failure (SystemExit 1).
+    check_startup_permissions()
     build_index()
     if HOST not in ("127.0.0.1", "localhost", "::1"):
         print(f"WARNING: HOST={HOST} is not loopback — the server will be reachable from the network; bind 127.0.0.1 unless behind VPN/TLS.")
