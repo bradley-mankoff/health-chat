@@ -19,9 +19,9 @@ mkdir -p models
 curl -L -o models/qwen3.8-27b-q4_k_m.gguf \
   "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
 
-# 4) Start LLM (OpenAI-compatible API on 127.0.0.1:8080)
-llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
-# Mac alternative: bash scripts/run_mlx.sh
+# 4) Start LLM (authenticated OpenAI-compatible API on 127.0.0.1:8080)
+bash scripts/run_llama.sh &
+# Mac alternative (unauthenticated, testing only): bash scripts/run_mlx.sh
 
 # 5) Run app
 mkdir -p data
