@@ -21,9 +21,28 @@ mlx_lm.server --model mlx-community/Qwen3.8-27B-Instruct-4bit --port 8080
 
 Configure health-chat via `LLM_URL` (default `http://127.0.0.1:8080`).
 
+## Testing: MiniCPM5-2B (tiny/fast smoke, not a quality gate)
+
+- **Why:** 2.5B dense, standard `LlamaForCausalLM` (stock llama.cpp, no custom build), official GGUF + MLX 4-bit from `openbmb`, Apache-2.0, ~1.5 GB at Q4_K_M / 4-bit, fast CPU smoke of index → retrieve → chat plumbing. `pytest` needs no model (LLM calls are mocked); tiny is for e2e smoke only.
+- **Not validated:** grounding/citation quality on 2B. Quality gate stays 27B. No MedQA/MedMCQA/PubMedQA numbers apply to this RAG setup on MiniCPM5-2B; not evaluated here.
+- **GGUF (llama.cpp):** `openbmb/MiniCPM5-2B-GGUF`, file `MiniCPM5-2B-Q4_K_M.gguf` (~1.5 GB).
+- **MLX (Mac):** `openbmb/MiniCPM5-2B-MLX` (4-bit, ~1.5 GB).
+
+```bash
+mkdir -p models
+curl -L -o models/minicpm5-2b-q4_k_m.gguf \
+  "https://huggingface.co/openbmb/MiniCPM5-2B-GGUF/resolve/main/MiniCPM5-2B-Q4_K_M.gguf"
+
+# llama.cpp smoke (any recent build; small ctx is faster):
+llama-server -m models/minicpm5-2b-q4_k_m.gguf --port 8080 --ctx-size 4096 --host 127.0.0.1
+
+# MLX smoke (Mac):
+bash scripts/run_mlx.sh openbmb/MiniCPM5-2B-MLX
+```
+
 ## v1 scope
 
-- Only 27B is validated. 7B/14B may work but are **unsupported** — grounding fidelity will differ and is not tested.
+- Only 27B is quality-validated. 7B/14B may work but are **unsupported** — grounding fidelity will differ and is not tested. Exception: the MiniCPM5-2B testing tier above is supported for plumbing smoke only, never as a quality gate.
 - Future: installer will detect RAM and suggest tier (7B for 8GB, 14B for 16GB, 27B for 32GB). Not in v1.
 
 ## Why Qwen3.8-27B?

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # chmod +x - executable script
 set -euo pipefail
-# Start llama-server with Qwen3.8-27B Q4_K_M GGUF.
-# Usage: bash scripts/run_llama.sh [path/to/gguf]
+# Start llama-server (default: Qwen3.8-27B Q4_K_M GGUF; testing: MiniCPM5-2B — see docs/MODELS.md).
+# Usage: bash scripts/run_llama.sh [path/to/gguf]  # e.g. models/minicpm5-2b-q4_k_m.gguf for fast smoke
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${1:-$ROOT/models/qwen3.8-27b-q4_k_m.gguf}"
 if [[ ! -f "$MODEL" ]]; then
