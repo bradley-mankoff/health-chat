@@ -16,8 +16,8 @@ Then:
 # Qwen3.8-27B Q4_K_M — ~16.5 GB on disk, ~18 GB resident at 8192 context, needs 32GB RAM — see MODELS.md
 mkdir -p models
 curl -L -o models/qwen3.8-27b-q4_k_m.gguf "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
-llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
-#    or on Apple Silicon (faster): bash scripts/run_mlx.sh
+bash scripts/run_llama.sh &  # authenticated, loopback only (shares LLM_API_KEY; see MODELS.md)
+#    or on Apple Silicon (faster, unauthenticated — testing only): bash scripts/run_mlx.sh
 mkdir -p data && cp ~/Downloads/*.pdf data/
 DATA_DIR=./data .venv/bin/python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal
