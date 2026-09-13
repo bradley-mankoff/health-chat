@@ -2,6 +2,10 @@
 # chmod +x - executable script
 set -euo pipefail
 # Start MLX LM server with Qwen3.8-27B (Mac alternative to llama.cpp).
+# NOTE: mlx_lm.server has no --api-key option, so this path is UNAUTHENTICATED.
+# Health-chat refuses to send records to an endpoint that accepts anonymous
+# requests — prefer scripts/run_llama.sh for PHI. Use MLX only for testing
+# without real records.
 # Usage: bash scripts/run_mlx.sh [mlx-model-id]
 # Requires: .venv/bin/python -m pip install mlx-lm
 MODEL="${1:-mlx-community/Qwen3.8-27B-Instruct-4bit}"
@@ -12,5 +16,6 @@ if ! "$PY" -c "import mlx_lm" 2>/dev/null; then
   echo "mlx_lm not found — $PY -m pip install mlx-lm" >&2
   exit 1
 fi
+echo "WARNING: mlx_lm.server does not support --api-key; health-chat identity check will refuse to send records" >&2
 echo "Starting mlx_lm server: $MODEL"
 exec "$PY" -m mlx_lm.server --model "$MODEL" --port 8080 --host 127.0.0.1

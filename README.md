@@ -36,7 +36,7 @@ If you have less than 32 GB, the model will OOM — the installer warns you.
 bash scripts/install.sh          # venv + deps + fetch guidelines
 mkdir -p models
 curl -L -o models/qwen3.8-27b-q4_k_m.gguf "https://huggingface.co/bartowski/Qwen_Qwen3.8-27B-GGUF/resolve/main/Qwen_Qwen3.8-27B-Q4_K_M.gguf"
-llama-server -m models/qwen3.8-27b-q4_k_m.gguf --port 8080 --ctx-size 8192 --host 127.0.0.1 &
+bash scripts/run_llama.sh &  # authenticated llama-server on 127.0.0.1:8080 (shares LLM_API_KEY; see docs/MODELS.md)
 mkdir -p data && cp ~/Downloads/*.pdf data/
 DATA_DIR=./data .venv/bin/python server.py
 # open http://127.0.0.1:8787 — passcode printed in terminal
@@ -44,7 +44,7 @@ DATA_DIR=./data .venv/bin/python server.py
 
 Windows: `powershell -ExecutionPolicy Bypass -File scripts/install.ps1`
 
-MLX (Mac alt): `bash scripts/run_mlx.sh` (needs `pip install mlx-lm`)
+MLX (Mac alt, unauthenticated — testing only): `bash scripts/run_mlx.sh` (needs `pip install mlx-lm`)
 
 See [docs/INSTALL.md](docs/INSTALL.md) for short-form install, `docs/HARDWARE.md` for specs, `docs/MODELS.md` for model download.
 
@@ -63,7 +63,7 @@ Health-chat is local-only — no account or cloud data. To remove:
 ```bash
 # stop the servers (Ctrl-C) then:
 rm -rf .venv/ data/ models/
-rm -f .passcode
+rm -f .passcode .llm_api_key
 # remove fetched guideline excerpts (keeps manifest):
 rm -rf resources/cache/
 rm -f resources/*/*.txt
