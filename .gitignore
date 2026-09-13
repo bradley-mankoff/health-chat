@@ -17,3 +17,5 @@ resources/cache/
 # resources/manifest.json is intentionally tracked (corpus index) and is NOT ignored
 # (it is .json, not .txt). All fetched *.txt under resources/ are local-only:
 resources/**/*.txt
+.scratch/factory-ledger.json*
+.scratch/factory-dispatch.log
