@@ -5,8 +5,10 @@ set -euo pipefail
 # Usage: bash scripts/run_llama.sh [path/to/gguf]  # e.g. models/minicpm5-2b-q4_k_m.gguf for fast smoke (see docs/MODELS.md testing tier)
 # Shares LLM_API_KEY with health-chat (server.py): env wins, else
 # .llm_api_key next to server.py, else generated and saved there (0600).
+# CTX_SIZE env overrides the context window (default 8192).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODEL="${1:-$ROOT/models/qwen3.8-27b-q4_k_m.gguf}"
+CTX="${CTX_SIZE:-8192}"
 if [[ ! -f "$MODEL" ]]; then
   echo "GGUF not found: $MODEL" >&2
   echo "Download Qwen3.8-27B Q4_K_M to that path — see docs/MODELS.md" >&2
@@ -29,4 +31,4 @@ else
 fi
 export LLM_API_KEY="$KEY"
 echo "Starting llama-server: $MODEL (authenticated, loopback only)"
-exec llama-server -m "$MODEL" --port 8080 --ctx-size 8192 --host 127.0.0.1 --api-key "$KEY"
+exec llama-server -m "$MODEL" --port 8080 --ctx-size "$CTX" --host 127.0.0.1 --api-key "$KEY"
