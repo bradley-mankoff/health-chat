@@ -11,6 +11,7 @@
 - **Loopback only, but not encrypted.** The app binds `127.0.0.1:8787` by default (override with `HOST`). It does not use TLS. Do not expose the port to a network or the internet — anyone with network access and the passcode could read your records.
 - **Passcode is not HIPAA auth.** The `Bearer` passcode in `.passcode` prevents casual local access, but it is a shared secret stored in plaintext. Treat it like a local password, not a compliance mechanism.
 - **No encryption at rest.** PDFs and the local LLM's context are stored as plain files. Full-disk encryption is your responsibility.
+- **Owner-only on-disk permissions (not encryption).** `.passcode` and record files are `0600`, `DATA_DIR` is `0700` on POSIX (Windows: owner-only ACL via `icacls`, or the server refuses to start with an unprotected passcode). This protects against other local accounts -- not against root or disk theft. A startup (and reindex) audit repairs insecure modes and reports only file names and permission bits, never record contents. The derived `labs.json` cache is no longer written; remove any legacy copy (`rm -f labs.json`).
 - **Browser storage.** Chat history lives in your browser session. Clearing site data clears it.
 - **LLM prompt logging contains PHI.** When `LLM_URL` points to a local `llama-server`, prompts (including lab values, names, and chat history) are sent to that process. If that server logs prompts or you proxy `LLM_URL` to a non-local endpoint, logs may contain PHI — keep `LLM_URL` on loopback and disable remote logging.
 

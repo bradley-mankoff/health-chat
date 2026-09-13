@@ -50,6 +50,18 @@ See [docs/INSTALL.md](docs/INSTALL.md) for short-form install, `docs/HARDWARE.md
 
 ---
 
+## Local file permissions
+
+Your records and passcode stay owner-only on disk: `.passcode` and uploaded
+record files are created `0600`, `DATA_DIR` is `0700` (POSIX; Windows uses an
+equivalent owner-only ACL via `icacls`, stripping inheritance and granting
+only the current user). Pre-existing files are tightened at startup, and an
+unprotectable passcode refuses to start rather than serve a readable secret.
+Every startup (and reindex) audits these seams and prints only file names and
+permission bits -- never record contents. Set `PERMS_REPAIR=0` for a
+report-only audit, `PERMS_STRICT=1` to make an unprotectable record file fatal.
+`labs.json` is no longer written; delete any legacy copy (`rm -f labs.json`).
+
 ## Uploading labs
 
 Drag-and-drop in the UI or drop PDFs in `DATA_DIR` then hit **Reindex**. Parser is Quest-optimized — other labs remain searchable via raw chunks and show “unparsed” in the preview table.
@@ -63,7 +75,7 @@ Health-chat is local-only — no account or cloud data. To remove:
 ```bash
 # stop the servers (Ctrl-C) then:
 rm -rf .venv/ data/ models/
-rm -f .passcode
+rm -f .passcode labs.json  # labs.json is a legacy derived lab cache (written by older versions, no longer generated)
 # remove fetched guideline excerpts (keeps manifest):
 rm -rf resources/cache/
 rm -f resources/*/*.txt

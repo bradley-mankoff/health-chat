@@ -33,7 +33,7 @@ Same steps as above after install (use `.\models\...`, `$env:DATA_DIR='./data'; 
 
 ## Uninstall / remove data
 
-See [README.md — How to uninstall](../README.md#how-to-uninstall--remove-data) — `rm -rf .venv data models resources/cache` + `rm resources/*/*.txt`, clear browser site data for `127.0.0.1:8787`.
+See [README.md — How to uninstall](../README.md#how-to-uninstall--remove-data) — `rm -rf .venv data models resources/cache` + `rm resources/*/*.txt` + `rm -f .passcode labs.json` (legacy derived lab cache), clear browser site data for `127.0.0.1:8787`.
 
 ## Troubleshooting
 
