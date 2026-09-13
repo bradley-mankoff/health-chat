@@ -53,6 +53,10 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
         async def aiter_lines(self):
             yield "data: [DONE]"
 
+    class FakeAuthResp:
+        def __init__(self, status_code):
+            self.status_code = status_code
+
     class FakeClient:
         def __init__(self, *a, **k):
             pass
@@ -63,8 +67,15 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        def stream(self, method, url, json):
+        async def get(self, url, headers=None):
+            auth = (headers or {}).get("Authorization", "")
+            if auth and auth == f"Bearer {server.LLM_API_KEY}":
+                return FakeAuthResp(200)
+            return FakeAuthResp(401)
+
+        def stream(self, method, url, json, headers=None):
             captured["messages"] = json["messages"]
+            captured["headers"] = headers
             return FakeResp()
 
     monkeypatch.setattr(server, "retrieve", lambda q, k=6: ["[src: f.pdf] ctx"])
@@ -88,6 +99,7 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
         server.JOBS.pop("t", None)
 
     msgs = captured["messages"]
+    assert captured["headers"]["Authorization"] == f"Bearer {server.LLM_API_KEY}"
     assert sum(1 for m in msgs if m["role"] == "system") == 1
     assert msgs[0]["role"] == "system"
     assert [m["role"] for m in msgs[1:-1]] == ["user"]

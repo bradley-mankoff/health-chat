@@ -3,12 +3,16 @@
 llama.cpp's OpenAI-compatible API (llama-server on :8080 by default).
 
 Env vars:
-  DATA_DIR   folder of records (default: ./data next to server.py)
-  LLM_URL    llama-server base URL (default: http://127.0.0.1:8080)
-  LLM_MODEL  model id sent to the LLM API (default: probe /v1/models)
-  HOST       listen host (default: 127.0.0.1 — loopback only)
-  PORT       listen port (default: 8787)
-  PASSCODE   shared secret; if unset, generated and saved to .passcode
+  DATA_DIR    folder of records (default: ./data next to server.py)
+  LLM_URL     llama-server base URL (default: http://127.0.0.1:8080)
+  LLM_MODEL   model id sent to the LLM API (default: probe /v1/models)
+  LLM_API_KEY shared secret for the local LLM endpoint; if unset, read from
+              .llm_api_key next to server.py, else generated and saved there.
+              Must match the key passed to llama-server --api-key
+              (see scripts/run_llama.sh).
+  HOST        listen host (default: 127.0.0.1 — loopback only)
+  PORT        listen port (default: 8787)
+  PASSCODE    shared secret; if unset, generated and saved to .passcode
 """
 import asyncio
 import getpass
@@ -480,12 +484,104 @@ _passcode_file = BASE / ".passcode"
 PASSCODE = os.environ.get("PASSCODE")
 if not PASSCODE:
     PASSCODE = _load_or_create_passcode(_passcode_file)
+_llm_key_file = BASE / ".llm_api_key"
+
+
+def _load_llm_api_key() -> str:
+    """Operator-provided (LLM_API_KEY env) or shared generated secret.
+
+    The same value must be passed to the supported runner
+    (``scripts/run_llama.sh`` forwards it as ``llama-server --api-key``).
+    """
+    key = os.environ.get("LLM_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        if _llm_key_file.exists():
+            key = _llm_key_file.read_text().strip()
+            if key:
+                return key
+    except Exception:
+        pass
+    key = secrets.token_hex(32)
+    try:
+        _llm_key_file.write_text(key)
+        try:
+            os.chmod(_llm_key_file, 0o600)
+        except Exception:
+            pass  # best-effort on platforms without chmod
+    except Exception:
+        pass
+    return key
+
+
+LLM_API_KEY = _load_llm_api_key()
+
+
+def _llm_headers(with_auth: bool = True) -> dict:
+    if with_auth and LLM_API_KEY:
+        return {"Authorization": f"Bearer {LLM_API_KEY}"}
+    return {}
+
+
+def _llm_auth_mismatch_msg(status: int) -> str:
+    return (
+        f"LLM authentication failed ({status}) at {LLM_URL}: LLM_API_KEY mismatch — "
+        'restart llama-server with the same key via scripts/run_llama.sh '
+        '(llama-server --api-key "$LLM_API_KEY") and set LLM_API_KEY '
+        "for health-chat to the same value."
+    )
+
+
+def _llm_no_auth_msg() -> str:
+    return (
+        f"LLM identity check failed: endpoint at {LLM_URL} accepts unauthenticated "
+        "requests — refusing to send records (possible impostor on loopback). "
+        "Start llama-server with --api-key via scripts/run_llama.sh "
+        "so the endpoint requires LLM_API_KEY."
+    )
+
+
+async def _verify_llm_identity(client) -> None:
+    """Authenticate the LLM endpoint before any prompt containing records is sent.
+
+    Probes ``GET /v1/models`` (no PHI) with the shared secret, then probes
+    without it. The endpoint must accept the secret and reject anonymous
+    requests; otherwise no chat payload is sent and an actionable error
+    is raised.
+    """
+    try:
+        auth_resp = await client.get(f"{LLM_URL}/v1/models", headers=_llm_headers())
+    except Exception as e:
+        raise RuntimeError(
+            f"LLM identity check failed: cannot reach LLM at {LLM_URL} ({e}); "
+            "is llama-server running? Start it with scripts/run_llama.sh."
+        ) from e
+    if auth_resp.status_code in (401, 403):
+        raise RuntimeError(_llm_auth_mismatch_msg(auth_resp.status_code))
+    if auth_resp.status_code != 200:
+        raise RuntimeError(
+            f"LLM identity check failed: GET {LLM_URL}/v1/models returned "
+            f"{auth_resp.status_code}; refusing to send records."
+        )
+    try:
+        anon_resp = await client.get(f"{LLM_URL}/v1/models")
+    except Exception:
+        return
+    if anon_resp.status_code in (401, 403):
+        return
+    if anon_resp.status_code == 200:
+        raise RuntimeError(_llm_no_auth_msg())
+
+
 # Loaded-model id: LLM_MODEL wins (multi-model servers route on the id);
 # otherwise probe llama-server, fall back to "" if unreachable.
 MODEL = os.environ.get("LLM_MODEL", "").strip()
 if not MODEL:
     try:
-        MODEL = httpx.get(f"{LLM_URL}/v1/models", timeout=5).json()["data"][0]["id"]
+        MODEL = httpx.get(
+            f"{LLM_URL}/v1/models", headers=_llm_headers(), timeout=5
+        ).json()["data"][0]["id"]
     except Exception:
         MODEL = ""
 
@@ -1188,9 +1284,15 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
             #   1.0 -> maximal thinking (can take 10+ min per answer)
         }
         async with httpx.AsyncClient(timeout=httpx.Timeout(3600.0, connect=10.0)) as client:
+            await _verify_llm_identity(client)
             async with client.stream(
-                "POST", f"{LLM_URL}/v1/chat/completions", json=payload
+                "POST", f"{LLM_URL}/v1/chat/completions", json=payload,
+                headers=_llm_headers(),
             ) as r:
+                if r.status_code in (401, 403):
+                    job["status"] = "error"
+                    job["error"] = _llm_auth_mismatch_msg(r.status_code)
+                    return
                 if r.status_code != 200:
                     job["status"] = "error"
                     job["error"] = (await r.aread()).decode()[:300]
@@ -1258,8 +1360,11 @@ if __name__ == "__main__":
     build_index()
     if HOST not in ("127.0.0.1", "localhost", "::1"):
         print(f"WARNING: HOST={HOST} is not loopback — the server will be reachable from the network; bind 127.0.0.1 unless behind VPN/TLS.")
+    if not any(h in LLM_URL for h in ("127.0.0.1", "localhost", "::1")):
+        print(f"WARNING: LLM_URL={LLM_URL} is not loopback — prompts contain PHI; keep LLM_URL on loopback.")
     print(f"data dir: {DATA_DIR}")
     print(f"model:    {MODEL or '(unknown)'}")
     print(f"indexed:  {len(INDEX['files'])} files, {len(INDEX['chunks'])} chunks")
     print(f"passcode: {PASSCODE}  (saved in {_passcode_file})")
+    print(f"llm auth: shared key from {'LLM_API_KEY env' if os.environ.get('LLM_API_KEY') else _llm_key_file} (required by llama-server --api-key)")
     uvicorn.run(app, host=HOST, port=PORT, log_level="warning")

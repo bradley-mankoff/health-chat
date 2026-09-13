@@ -2,7 +2,8 @@
 
 ## What "private" means in v1
 
-- **Fully local by default.** Your PDFs stay on disk in `./data` (or `DATA_DIR`). The server only talks to the local LLM at `LLM_URL` (default `http://127.0.0.1:8080`). No documents, chat history, or lab values are sent to any cloud API.
+- **Fully local by default.** Your PDFs stay on disk in `./data` (or `DATA_DIR`). The server only talks to the local LLM at `LLM_URL` (default `http://127.0.0.1:8080`, loopback only). No documents, chat history, or lab values are sent to any cloud API.
+- **Authenticated LLM channel.** Health-chat and the supported runner share `LLM_API_KEY` (env → `.llm_api_key` → generated). Model discovery and chat requests send `Authorization: Bearer <key>`, and each chat first verifies the endpoint accepts the key and rejects anonymous requests — otherwise no prompt is sent and an actionable identity error is reported. Start the model with `bash scripts/run_llama.sh` so `llama-server --api-key` is enforced.
 - **No outbound network in v1.** There is no web search, no analytics, no telemetry. The only outbound HTTP the server makes is to the local LLM.
 - **Guideline fetcher is opt-in.** `scripts/fetch_guidelines.py` downloads public guideline excerpts from their publishers. It does not send your health data anywhere.
 
@@ -13,13 +14,14 @@
 - **No encryption at rest.** PDFs and the local LLM's context are stored as plain files. Full-disk encryption is your responsibility.
 - **Owner-only on-disk permissions (not encryption).** `.passcode` and record files are `0600`, `DATA_DIR` is `0700` on POSIX (Windows: owner-only ACL via `icacls`, or the server refuses to start with an unprotected passcode). This protects against other local accounts -- not against root or disk theft. A startup (and reindex) audit repairs insecure modes and reports only file names and permission bits, never record contents. The derived `labs.json` cache is no longer written; remove any legacy copy (`rm -f labs.json`).
 - **Browser storage.** Chat history lives in your browser session. Clearing site data clears it.
-- **LLM prompt logging contains PHI.** When `LLM_URL` points to a local `llama-server`, prompts (including lab values, names, and chat history) are sent to that process. If that server logs prompts or you proxy `LLM_URL` to a non-local endpoint, logs may contain PHI — keep `LLM_URL` on loopback and disable remote logging.
+- **LLM prompt logging contains PHI.** When `LLM_URL` points to a local `llama-server`, prompts (including lab values, names, and chat history) are sent to that authenticated process. If that server logs prompts or you proxy `LLM_URL` to a non-local endpoint, logs may contain PHI — keep `LLM_URL` on loopback and disable remote logging. `mlx_lm.server` has no `--api-key` option, so the MLX path cannot enforce the identity check — prefer `scripts/run_llama.sh` for real records.
 
 ## Threat model — honest limitations (employer-visible)
 
 - **XSS via LLM markdown (mitigated by sanitization).** Model output is rendered as markdown via `marked`. Raw HTML from model/retrieved text is escaped before rendering and markdown is sanitized (no inline `<script>` execution). Treat sanitization as a trust boundary; if you change the renderer, re-audit.
 - **Path disclosure via `/api/health` (only basename).** Health endpoint returns chunk/file counts for diagnostics; if file paths were exposed, absolute `DATA_DIR` could leak. The response exposes only basenames (or is designed to expose only basenames) and requires `Authorization: Bearer <passcode>` — do not add absolute paths to unauthenticated responses.
-- **LLM prompt logging contains PHI.** See "What is NOT protected" above — prompts carry record excerpts. Ensure local LLM logs are not shipped to third parties and consider disabling request logging on `llama-server`.
+- **LLM endpoint spoofing on loopback (mitigated by API-key identity check).** Another local process could bind `LLM_URL` first and receive prompts. Health-chat probes `GET /v1/models` with `LLM_API_KEY` (must succeed) and without it (must return `401`/`403`) before any prompt is sent; a mismatch or an endpoint that accepts anonymous requests aborts the chat with an identity error and sends no PHI.
+- **LLM prompt logging contains PHI.** Prompts carry record excerpts. Ensure local LLM logs are not shipped to third parties and consider disabling request logging on `llama-server`.
 - **Supply-chain SRI for `marked.min.js`.** The frontend loads `/static/marked.min.js` (vendored `marked v12.0.2`). Verify its integrity with an SRI hash when served from a CDN or after updating the vendored file (e.g. `<script integrity="sha384-…" crossorigin="anonymous" src="…">`) and pin the version in `package.json`/lockfile to prevent silent upgrades.
 - **JOBS eviction is FIFO (bounded memory).** In-memory chat jobs are capped at `_MAX_JOBS=30`; the oldest job is evicted first (`FIFO`) via `_prune_jobs()` when the cap is exceeded. Eviction is intentional to bound memory — a pending job that is evicted returns `404 job expired` and the client must retry.
 

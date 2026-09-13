@@ -1,4 +1,5 @@
 .passcode
+.llm_api_key
 labs.json
 handoff.md
 .venv/
