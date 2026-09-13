@@ -37,9 +37,11 @@ shared secret before any records are sent:
   generate) and sends `Authorization: Bearer <key>` on model discovery
   (`GET /v1/models`) and chat (`POST /v1/chat/completions`).
 - Before each chat, health-chat probes `GET /v1/models` with the key (must
-  return `200`) and without it (must return `401`/`403`). If the endpoint
-  rejects the key or accepts anonymous requests, no prompt is sent and the
-  job reports an actionable identity error (possible impostor on loopback).
+  return `200`), then probes `POST /v1/chat/completions` without credentials
+  using a static benign prompt (must return `401`/`403` — the models endpoint
+  stays public on stock servers, so the chat door is the real check). If the
+  endpoint rejects the key or accepts anonymous chat, no prompt is sent and
+  the job reports an actionable identity error (possible impostor on loopback).
 - Keep `LLM_URL` on loopback (`127.0.0.1`). A non-loopback `LLM_URL` prints a
   startup warning.
 
