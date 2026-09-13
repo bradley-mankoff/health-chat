@@ -542,13 +542,20 @@ def _llm_no_auth_msg() -> str:
     )
 
 
+# Static benign identity probe: carries no records, history, or user input.
+# Sent WITHOUT credentials; a key-enforcing endpoint must reject it.
+_IDENTITY_PROBE_MESSAGES = [{"role": "user", "content": "Reply with the single word: ready"}]
+
 async def _verify_llm_identity(client) -> None:
     """Authenticate the LLM endpoint before any prompt containing records is sent.
 
-    Probes ``GET /v1/models`` (no PHI) with the shared secret, then probes
-    without it. The endpoint must accept the secret and reject anonymous
-    requests; otherwise no chat payload is sent and an actionable error
-    is raised.
+    Probes ``GET /v1/models`` with the shared secret (must succeed — proves
+    reachability and key match), then probes ``POST /v1/chat/completions``
+    without credentials using a static benign prompt (must fail — proves the
+    chat door enforces the key). The models endpoint is not used for the
+    anonymous check because stock servers leave it public even when chat
+    requires a key. Otherwise no chat payload is sent and an actionable
+    error is raised.
     """
     try:
         auth_resp = await client.get(f"{LLM_URL}/v1/models", headers=_llm_headers())
@@ -564,14 +571,18 @@ async def _verify_llm_identity(client) -> None:
             f"LLM identity check failed: GET {LLM_URL}/v1/models returned "
             f"{auth_resp.status_code}; refusing to send records."
         )
+    probe = {"messages": _IDENTITY_PROBE_MESSAGES, "max_tokens": 1, "temperature": 0}
+    if MODEL:
+        probe["model"] = MODEL
     try:
-        anon_resp = await client.get(f"{LLM_URL}/v1/models")
+        anon_resp = await client.post(
+            f"{LLM_URL}/v1/chat/completions", json=probe, timeout=60
+        )
     except Exception:
         return
     if anon_resp.status_code in (401, 403):
         return
-    if anon_resp.status_code == 200:
-        raise RuntimeError(_llm_no_auth_msg())
+    raise RuntimeError(_llm_no_auth_msg())
 
 
 # Loaded-model id: LLM_MODEL wins (multi-model servers route on the id);

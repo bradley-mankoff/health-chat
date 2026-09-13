@@ -73,6 +73,13 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
                 return FakeAuthResp(200)
             return FakeAuthResp(401)
 
+        async def post(self, url, json=None, headers=None, timeout=None):
+            auth = (headers or {}).get("Authorization", "")
+            captured["probe"] = json
+            if auth and auth == f"Bearer {server.LLM_API_KEY}":
+                return FakeAuthResp(200)
+            return FakeAuthResp(401)
+
         def stream(self, method, url, json, headers=None):
             captured["messages"] = json["messages"]
             captured["headers"] = headers
@@ -97,6 +104,7 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
         await _run_chat("t", body)
     finally:
         server.JOBS.pop("t", None)
+    assert captured["probe"]["messages"] == server._IDENTITY_PROBE_MESSAGES
 
     msgs = captured["messages"]
     assert captured["headers"]["Authorization"] == f"Bearer {server.LLM_API_KEY}"
@@ -104,3 +112,48 @@ async def test_crafted_history_cannot_add_privileged_role(monkeypatch):
     assert msgs[0]["role"] == "system"
     assert [m["role"] for m in msgs[1:-1]] == ["user"]
     assert all(m["role"] in ("user", "assistant") for m in msgs[1:-1])
+
+
+async def test_chat_refuses_keyless_endpoint(monkeypatch):
+    """HCH-26: an endpoint that accepts anonymous chat gets no records."""
+    streamed = []
+
+    class OpenResp:
+        status_code = 200
+
+    class OpenClient:
+        def __init__(self, *a, **k):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def get(self, url, headers=None):
+            return OpenResp()
+
+        async def post(self, url, json=None, headers=None, timeout=None):
+            return OpenResp()
+
+        def stream(self, method, url, json, headers=None):
+            streamed.append(json)
+            raise AssertionError("no prompt may be sent to a keyless endpoint")
+
+    monkeypatch.setattr(server, "retrieve", lambda q, k=6: ["[src: f.pdf] ctx"])
+    monkeypatch.setattr(server, "triage_guidelines", lambda q, **k: [])
+    monkeypatch.setattr(server.httpx, "AsyncClient", OpenClient)
+
+    body = ChatIn(question="hemoglobin?", history=[])
+    server.JOBS["u"] = {"status": "queued", "reasoning": [], "answer": [],
+                        "sources": [], "gl": [], "error": None}
+    try:
+        await _run_chat("u", body)
+        job = server.JOBS["u"]
+    finally:
+        server.JOBS.pop("u", None)
+
+    assert job["status"] == "error"
+    assert "accepts unauthenticated" in job["error"]
+    assert streamed == []
