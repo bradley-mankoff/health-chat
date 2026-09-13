@@ -81,6 +81,9 @@ Unblocked lights-off tickets get claimed. Implementers write code. If the slice 
 ### Approval-gated auto-merge (opt-in)
 
 Your only per-ticket act is **judgment only a human can make** — taste, direction, anything no checklist can settle. Everything after judgment is machine labor. With `auto_merge: true` in `factory.json`, each cycle marks draft PRs on in-review tickets ready for review, then merges every PR with judgment on record and no failing checks, and marks its ticket **done**. Judgment on record means either your approval review, or a fully-checked acceptance checklist where every box was checked with cited evidence. Self-authored PRs cannot be approved on GitHub at all, so the checklist path is what carries machine-verified work home. Without auto-merge, merging and the done flip stay yours. The poller never merges on its own judgment: nothing on record, no merge, no exceptions.
+Lights-on slices never merge on checklist evidence alone — only your
+approval merges them. If the factory cannot read a slice's lights stamp,
+it treats it as on.
 
 ### When something comes back
 

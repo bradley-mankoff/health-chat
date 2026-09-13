@@ -1,11 +1,11 @@
 ---
-description: Forced-fuse judge for two isolated implementations. Writes $ARTIFACTS_DIR/fused/ then emits JSON.
+description: Forced-fuse judge for three isolated implementations. Writes $ARTIFACTS_DIR/fused/ then emits JSON.
 argument-hint: the original user request
 ---
 
-# Fusion judge — two implementations, forced fuse
+# Fusion judge — three implementations, forced fuse
 
-Two panels implemented the request. Synthesize them. Do not merely pick one.
+Three panels implemented the request. Synthesize them. Do not merely pick one.
 
 ## Request
 
@@ -15,6 +15,7 @@ $ARGUMENTS
 
 - Panel a — `$ARTIFACTS_DIR/reports/a.md` — `$ARTIFACTS_DIR/panels/a/`
 - Panel b — `$ARTIFACTS_DIR/reports/b.md` — `$ARTIFACTS_DIR/panels/b/`
+- Panel c — `$ARTIFACTS_DIR/reports/c.md` — `$ARTIFACTS_DIR/panels/c/`
 
 Read the reports, then the files. Fuse the strongest ideas into your own tree.
 
@@ -26,4 +27,4 @@ Read the reports, then the files. Fuse the strongest ideas into your own tree.
 {"verdict": "...", "mode": "fuse", "chosen": "a"}
 ```
 
-`chosen` is `"a"` or `"b"` — fallback only. Emitting JSON without the fused tree is a failure.
+`chosen` is `"a"`, `"b"`, or `"c"` — fallback only. Emitting JSON without the fused tree is a failure.

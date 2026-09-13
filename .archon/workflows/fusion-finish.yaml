@@ -1,0 +1,34 @@
+name: fusion-finish
+description: |
+  Shared tail for fusion tactics: apply the fused tree, then finish.
+  Factory dispatch (FACTORY_REF set by the poller) opens one draft PR;
+  direct runs stop after apply and leave the commit to the user.
+  Expects the fused tree at $ARTIFACTS_DIR/fused (forced-fuse judge output).
+
+nodes:
+  - id: apply-fused
+    bash: |
+      set -euo pipefail
+      SRC="$ARTIFACTS_DIR/fused"
+      test -d "$SRC" && test -n "$(ls -A "$SRC")" || { echo "fused missing: $SRC" >&2; exit 1; }
+      chmod -R u+w . 2>/dev/null || true
+      rsync -a --exclude='.git' "$SRC/" ./
+      git status --short
+
+  - id: draft-pr
+    bash: |
+      set -euo pipefail
+      if [ -z "${FACTORY_REF:-}" ]; then
+        echo "direct run — fused tree applied, no PR (FACTORY_REF unset)"
+        git status --short
+        exit 0
+      fi
+      git add -A
+      git diff --cached --quiet && { echo "no changes"; exit 0; }
+      REF="${FACTORY_REF:-task}"
+      git commit -m "factory: $REF"
+      git push -u origin HEAD
+      gh pr create --draft --base "${FACTORY_BASE_BRANCH:-develop}" \
+        --title "factory: $REF (${FACTORY_TACTIC:-fusion})" \
+        --body "Factory slice \`$REF\` (${FACTORY_TACTIC:-fusion}). Draft. Human/QA merge."
+    depends_on: [apply-fused]

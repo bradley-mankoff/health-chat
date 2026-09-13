@@ -104,7 +104,7 @@ async function init() {
 
 const [, , sub, ...rest] = process.argv;
 if (!sub || sub === "help") {
-  console.log("usage: piyaz.ts ready <project> | get <ref> | claim <ref> | in-review <ref> | search <project> [status] | create-batch <project> <json-path>");
+  console.log("usage: piyaz.ts ready <project> | get <ref> | claim <ref> | in-review <ref> | record <ref> <json-path> | search <project> [status] | create-batch <project> <json-path>");
   process.exit(sub ? 0 : 1);
 }
 
@@ -130,6 +130,18 @@ if (sub === "create-batch") {
 }
 
 await init();
+
+let recordPayload = null;
+if (sub === "record") {
+  const [ref, jsonPath] = rest;
+  if (!ref) throw new Error("record requires ref");
+  if (!jsonPath) throw new Error("record requires json path");
+  try {
+    recordPayload = JSON.parse(await Bun.file(jsonPath).text());
+  } catch (e) {
+    throw new Error("record: cannot read JSON at " + jsonPath + ": " + (e?.message ?? e));
+  }
+}
 
 if (sub === "ready") {
   const project = rest[0];
@@ -180,6 +192,20 @@ if (sub === "ready") {
   const [project] = rest;
   const { project: _injected, ...body } = createBatchPayload;
   const out = await call("piyaz_create", { project, ...body });
+  console.log(JSON.stringify(out));
+} else if (sub === "record") {
+  const [ref] = rest;
+  const p = recordPayload ?? {};
+  const operations = [];
+  if (p.executionRecord) operations.push({ op: "set", field: "executionRecord", text: p.executionRecord });
+  for (const d of p.decisions ?? []) operations.push({ op: "add", collection: "decisions", text: d });
+  if (p.files) operations.push({ op: "set", field: "files", value: p.files });
+  for (const [id, passed] of Object.entries(p.checks ?? {})) {
+    operations.push({ op: passed ? "check" : "uncheck", collection: "acceptanceCriteria", id });
+  }
+  if (p.prUrl) operations.push({ op: "set", field: "prUrl", value: p.prUrl });
+  if (operations.length === 0) throw new Error("record: payload carries no operations");
+  const out = await call("piyaz_edit", { task: ref, operations });
   console.log(JSON.stringify(out));
 } else {
   throw new Error("unknown subcommand: " + sub);

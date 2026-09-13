@@ -1,7 +1,7 @@
-name: fusion-panel-impl-2
+name: fusion-panel-impl-3
 description: |
-  Two-wide implement block. Isolated copies a/b. No panel-c.
-  Include from fusion-02. Terminal node: verify-clean.
+  Three-wide implement block. Isolated copies a/b/c on @panel-a/b/c.
+  Include from fusion-02 and fusion-10. Terminal node: verify-clean.
 
 nodes:
   - id: setup
@@ -10,7 +10,7 @@ nodes:
       mkdir -p "$ARTIFACTS_DIR/panels" "$ARTIFACTS_DIR/reports"
       rm -rf "$ARTIFACTS_DIR"/panels/* "$ARTIFACTS_DIR"/reports/* \
              "$ARTIFACTS_DIR"/fused 2>/dev/null || true
-      for p in a b; do
+      for p in a b c; do
         DEST="$ARTIFACTS_DIR/panels/$p"
         mkdir -p "$DEST"
         if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -22,8 +22,7 @@ nodes:
       find . -name .git -prune -o -exec chmod a-w {} +
 
   - id: panel-a
-    model: small
-    retry: {max_attempts: 5, delay_ms: 5000, on_error: all}
+    model: '@panel-a'
     context: fresh
     depends_on: [setup]
     prompt: |
@@ -33,14 +32,23 @@ nodes:
       Do not touch the checkout (it is read-only).
 
   - id: panel-b
-    model: small
-    retry: {max_attempts: 5, delay_ms: 5000, on_error: all}
+    model: '@panel-b'
     context: fresh
     depends_on: [setup]
     prompt: |
       Independent implementer. Work ONLY in $ARTIFACTS_DIR/panels/b.
       Request: $ARGUMENTS
       Implement, then write $ARTIFACTS_DIR/reports/b.md (files, rationale, how to verify).
+      Do not touch the checkout (it is read-only).
+
+  - id: panel-c
+    model: '@panel-c'
+    context: fresh
+    depends_on: [setup]
+    prompt: |
+      Independent implementer. Work ONLY in $ARTIFACTS_DIR/panels/c.
+      Request: $ARGUMENTS
+      Implement, then write $ARTIFACTS_DIR/reports/c.md (files, rationale, how to verify).
       Do not touch the checkout (it is read-only).
 
   - id: verify-clean
@@ -52,4 +60,4 @@ nodes:
         echo "$DIRTY" >&2
         exit 1
       fi
-    depends_on: [panel-a, panel-b]
+    depends_on: [panel-a, panel-b, panel-c]

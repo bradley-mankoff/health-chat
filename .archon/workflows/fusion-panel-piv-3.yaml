@@ -1,6 +1,7 @@
-name: fusion-panel-piv-2
+name: fusion-panel-piv-3
 description: |
-  Two-wide PIV block. Isolated copies a/b. Include from fusion-04.
+  Three-wide PIV block. Isolated copies a/b/c on @panel-a/b/c.
+  Include from fusion-04. Terminal node: verify-clean.
 
 nodes:
   - id: setup
@@ -9,7 +10,7 @@ nodes:
       mkdir -p "$ARTIFACTS_DIR/panels" "$ARTIFACTS_DIR/reports"
       rm -rf "$ARTIFACTS_DIR"/panels/* "$ARTIFACTS_DIR"/reports/* \
              "$ARTIFACTS_DIR"/fused 2>/dev/null || true
-      for p in a b; do
+      for p in a b c; do
         DEST="$ARTIFACTS_DIR/panels/$p"
         mkdir -p "$DEST"
         if git rev-parse --verify HEAD >/dev/null 2>&1; then
@@ -21,7 +22,7 @@ nodes:
       find . -name .git -prune -o -exec chmod a-w {} +
 
   - id: piv-a
-    model: small
+    model: '@panel-a'
     depends_on: [setup]
     loop:
       until: VALIDATED
@@ -34,7 +35,7 @@ nodes:
         Do not touch the checkout.
 
   - id: piv-b
-    model: small
+    model: '@panel-b'
     depends_on: [setup]
     loop:
       until: VALIDATED
@@ -46,6 +47,19 @@ nodes:
         When complete AND validated, write $ARTIFACTS_DIR/reports/b.md and end with <promise>VALIDATED</promise>.
         Do not touch the checkout.
 
+  - id: piv-c
+    model: '@panel-c'
+    depends_on: [setup]
+    loop:
+      until: VALIDATED
+      max_iterations: 6
+      fresh_context: true
+      prompt: |
+        PIV in $ARTIFACTS_DIR/panels/c only. Request: $ARGUMENTS
+        Plan, implement, validate (run tests in the copy). Fix failures.
+        When complete AND validated, write $ARTIFACTS_DIR/reports/c.md and end with <promise>VALIDATED</promise>.
+        Do not touch the checkout.
+
   - id: verify-clean
     bash: |
       set -euo pipefail
@@ -55,4 +69,4 @@ nodes:
         echo "$DIRTY" >&2
         exit 1
       fi
-    depends_on: [piv-a, piv-b]
+    depends_on: [piv-a, piv-b, piv-c]
