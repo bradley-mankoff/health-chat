@@ -197,6 +197,7 @@ if (sub === "ready") {
   const [ref] = rest;
   const p = recordPayload ?? {};
   const operations = [];
+  if (p.tags) operations.push({ op: "set", field: "tags", value: p.tags });
   if (p.executionRecord) operations.push({ op: "set", field: "executionRecord", text: p.executionRecord });
   for (const d of p.decisions ?? []) operations.push({ op: "add", collection: "decisions", text: d });
   if (p.files) operations.push({ op: "set", field: "files", value: p.files });
