@@ -75,12 +75,14 @@ if ! "$VENV_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1
   exit 1
 fi
 "$VENV_PY" -m pip install -U pip wheel -q
+echo "-> pip install --require-hashes -r requirements.lock"
+"$VENV_PY" -m pip install --require-hashes -r "$ROOT/requirements.lock" -q
 if (( DEV )); then
   echo "-> pip install -e .[dev]"
   "$VENV_PY" -m pip install -e ".[dev]" -q
 else
-  echo "-> pip install -e ."
-  "$VENV_PY" -m pip install -e . -q
+  echo "-> pip install -e . --no-deps"
+  "$VENV_PY" -m pip install -e . --no-deps -q
 fi
 
 # guidelines

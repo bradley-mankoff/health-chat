@@ -8,7 +8,7 @@
 bash scripts/install.sh
 ```
 
-What it does: creates `.venv` (reuses an existing one only if its interpreter is 3.10+), `pip install -e .`, fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+. Unknown installer arguments are rejected. Developers: `bash scripts/install.sh --dev` (POSIX) or `powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev` (Windows) to include the pytest suite.
+What it does: creates `.venv` (reuses an existing one only if its interpreter is 3.10+), `pip install --require-hashes -r requirements.lock` (hash-pinned production dependencies), `pip install -e . --no-deps`, fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+. Unknown installer arguments are rejected. Developers: `bash scripts/install.sh --dev` (POSIX) or `powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev` (Windows) to include the pytest suite (test-only dependencies are never in the lock).
 
 Then:
 
@@ -30,6 +30,24 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
 
 Same steps as above after install (use `.\models\...`, `$env:DATA_DIR='./data'; .\.venv\Scripts\python.exe server.py`). See `scripts/install.ps1` for details.
+
+## Dependency lockfile
+
+Production installs on both POSIX (`scripts/install.sh`) and Windows (`scripts/install.ps1`) consume the same `requirements.lock`: every production transitive dependency pinned with hashes, installed via `pip install --require-hashes -r requirements.lock`. Test-only dependencies (`pytest`, `pytest-asyncio`) stay out of the lock — `--dev` / `-Dev` adds them on top.
+
+Refresh the lock from `pyproject.toml` after changing dependencies:
+
+```bash
+uv pip compile --universal --generate-hashes pyproject.toml -o requirements.lock
+```
+
+Audit the locked set before release (must report no known vulnerabilities; record any exception here):
+
+```bash
+uvx pip-audit -r requirements.lock
+```
+
+Last audit: 2026-09-14 — no known vulnerabilities found.
 
 ## Uninstall / remove data
 

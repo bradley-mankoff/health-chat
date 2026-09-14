@@ -82,12 +82,15 @@ if ($venvOk -ne "1") {
   exit 1
 }
 & $VenvPy -m pip install -U pip wheel -q
+$LockFile = Join-Path $Root "requirements.lock"
+Write-Host "-> pip install --require-hashes -r requirements.lock"
+& $VenvPy -m pip install --require-hashes -r $LockFile -q
 if ($Dev) {
   Write-Host "-> pip install -e .[dev]"
   & $VenvPy -m pip install -e ".[dev]" -q
 } else {
-  Write-Host "-> pip install -e ."
-  & $VenvPy -m pip install -e . -q
+  Write-Host "-> pip install -e . --no-deps"
+  & $VenvPy -m pip install -e . --no-deps -q
 }
 
 if (Test-Path "resources\manifest.json") {
