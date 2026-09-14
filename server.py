@@ -24,6 +24,7 @@ import secrets
 import stat
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -1220,17 +1221,240 @@ async def guidelines(request: Request):
 # connection, so phone suspension / tab backgrounding can't kill an answer.
 
 JOBS: dict[str, dict] = {}
-_MAX_JOBS = 30
+_JOB_TASKS: dict[str, asyncio.Task] = {}
+JOB_TASKS = _JOB_TASKS
+_MAX_JOBS = int(os.environ.get("CHAT_MAX_JOBS", "30"))
+MAX_JOBS = _MAX_JOBS
+# Terminal-job retention (documented TTL): done/error/cancelled jobs compact
+# their token fragments to single strings and expire JOB_TTL_SECONDS after
+# finishing (default 1800s; override via CHAT_JOB_TTL_SECONDS/CHAT_JOB_TTL).
+JOB_TTL_SECONDS = float(os.environ.get("CHAT_JOB_TTL_SECONDS", os.environ.get("CHAT_JOB_TTL", "1800")))
+JOB_TTL = JOB_TTL_SECONDS
+_JOB_TTL = JOB_TTL_SECONDS
+# Idle-stream guard: abort a model stream with no content/reasoning delta
+# after CHAT_IDLE_TIMEOUT_SECONDS (default 120s; via CHAT_IDLE_TIMEOUT*
+# env), well before the 3600s httpx ceiling, with an actionable error.
+CHAT_IDLE_TIMEOUT_SECONDS = float(os.environ.get("CHAT_IDLE_TIMEOUT_SECONDS", os.environ.get("CHAT_IDLE_TIMEOUT", "120")))
+CHAT_IDLE_TIMEOUT = CHAT_IDLE_TIMEOUT_SECONDS
+IDLE_TIMEOUT = CHAT_IDLE_TIMEOUT_SECONDS
+_JOB_IDLE_TIMEOUT = CHAT_IDLE_TIMEOUT_SECONDS
+# Polls return a bounded copy: each text field truncated to this many chars.
+MAX_POLL_CHARS = int(os.environ.get("CHAT_MAX_POLL_CHARS", "100000"))
+TERMINAL_STATUSES = frozenset({"done", "error", "cancelled"})
+_TERMINAL_STATUSES = TERMINAL_STATUSES
+
+
+def _max_jobs_limit() -> int:
+    env = os.environ.get("CHAT_MAX_JOBS")
+    if env is not None:
+        try:
+            return max(1, int(float(env)))
+        except ValueError:
+            pass
+    vals = []
+    for key in ("_MAX_JOBS", "MAX_JOBS"):
+        try:
+            v = globals().get(key)
+            if v is not None:
+                vals.append(max(1, int(float(v))))
+        except (TypeError, ValueError):
+            continue
+    return min(vals) if vals else 30
+
+
+def _job_ttl_seconds() -> float:
+    env = os.environ.get("CHAT_JOB_TTL_SECONDS", os.environ.get("CHAT_JOB_TTL"))
+    if env is not None:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    vals = []
+    for key in ("JOB_TTL_SECONDS", "JOB_TTL", "_JOB_TTL"):
+        try:
+            v = globals().get(key)
+            if v is not None:
+                vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return min(vals) if vals else 1800.0
+
+
+def _idle_timeout_seconds() -> float:
+    env = os.environ.get("CHAT_IDLE_TIMEOUT_SECONDS", os.environ.get("CHAT_IDLE_TIMEOUT"))
+    if env is not None:
+        try:
+            return float(env)
+        except ValueError:
+            pass
+    vals = []
+    for key in ("CHAT_IDLE_TIMEOUT_SECONDS", "CHAT_IDLE_TIMEOUT", "IDLE_TIMEOUT", "_JOB_IDLE_TIMEOUT"):
+        try:
+            v = globals().get(key)
+            if v is not None:
+                vals.append(float(v))
+        except (TypeError, ValueError):
+            continue
+    return min(vals) if vals else 120.0
+
+
+def _poll_limit() -> int:
+    env = os.environ.get("CHAT_MAX_POLL_CHARS")
+    if env is not None:
+        try:
+            return max(1000, int(float(env)))
+        except ValueError:
+            pass
+    try:
+        return max(1000, int(globals().get("MAX_POLL_CHARS", 100000)))
+    except (TypeError, ValueError):
+        return 100000
+
+
+def _is_terminal(job: dict) -> bool:
+    return job.get("status") in TERMINAL_STATUSES
+
+
+def _compact_job(job: dict) -> None:
+    """Join per-token fragment lists into single strings to bound memory."""
+    for key in ("answer", "reasoning"):
+        v = job.get(key)
+        if isinstance(v, list):
+            job[key] = "".join(v) if v else ""
+        elif v is None:
+            job[key] = ""
+        elif not isinstance(v, str):
+            job[key] = str(v)
+
+
+def _finish_job(job: dict, status: str, error=None) -> None:
+    _compact_job(job)
+    job["status"] = status
+    job["error"] = error
+    job["finished_at"] = time.time()
+
+
+def _job_timestamp(job: dict):
+    ts = job.get("finished_at")
+    if ts is None:
+        ts = job.get("created_at")
+    try:
+        return float(ts) if ts is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _expire_jobs(now: float | None = None) -> int:
+    """Drop terminal jobs older than the documented TTL. Returns count."""
+    ttl = _job_ttl_seconds()
+    if ttl <= 0:
+        return 0
+    if now is None:
+        now = time.time()
+    expired = []
+    for jid, job in list(JOBS.items()):
+        if not _is_terminal(job):
+            continue
+        ts = _job_timestamp(job)
+        if ts is None:
+            continue
+        if now - ts >= ttl:
+            expired.append(jid)
+    for jid in expired:
+        JOBS.pop(jid, None)
+        _JOB_TASKS.pop(jid, None)
+    return len(expired)
+
+
+def _oldest_terminal_id() -> str | None:
+    oldest = None
+    oldest_ts = None
+    for jid, job in JOBS.items():
+        if not _is_terminal(job):
+            continue
+        ts = _job_timestamp(job)
+        key = float(ts) if ts is not None else float("inf")
+        if oldest is None or key < oldest_ts:
+            oldest, oldest_ts = jid, key
+    return oldest
 
 
 def _prune_jobs() -> None:
-    while len(JOBS) > _MAX_JOBS:
-        JOBS.pop(next(iter(JOBS)))
+    """Expire TTL jobs, then evict oldest terminal jobs over capacity.
+
+    Queued/running jobs are never evicted; when only active jobs remain
+    the caller must reject new work with 429 instead.
+    """
+    _expire_jobs()
+    limit = _max_jobs_limit()
+    while len(JOBS) > limit:
+        oldest = _oldest_terminal_id()
+        if oldest is None:
+            break
+        JOBS.pop(oldest, None)
+        _JOB_TASKS.pop(oldest, None)
+
+
+def _public_job(job: dict) -> dict:
+    """Bounded poll copy: fragments joined, each text field truncated."""
+    limit = _poll_limit()
+
+    def _txt(v) -> str:
+        if isinstance(v, list):
+            v = "".join(v)
+        if v is None:
+            return ""
+        s = v if isinstance(v, str) else str(v)
+        if len(s) > limit:
+            return s[:limit] + "...[truncated]"
+        return s
+    err = job.get("error")
+    if isinstance(err, list):
+        err = "".join(err)
+    elif err is not None and not isinstance(err, str):
+        err = str(err)
+    if isinstance(err, str) and len(err) > limit:
+        err = err[:limit] + "...[truncated]"
+    return {
+        "status": job.get("status"),
+        "question": _txt(job.get("question", "")),
+        "reasoning": _txt(job.get("reasoning", "")),
+        "answer": _txt(job.get("answer", "")),
+        "sources": job.get("sources", []),
+        "gl": job.get("gl", []),
+        "error": err,
+    }
+
+
+def _cancel_job(job_id: str, reason: str = "cancelled by user") -> dict | None:
+    """Request cancellation: stop the model task, leave a terminal job."""
+    job = JOBS.get(job_id)
+    if job is None or _is_terminal(job):
+        return job
+    job["cancel_requested"] = True
+    task = _JOB_TASKS.get(job_id)
+    if task is not None and not task.done():
+        task.cancel()
+    if not _is_terminal(job):
+        _finish_job(job, "cancelled", reason)
+    return job
 
 
 async def _run_chat(job_id: str, body: ChatIn) -> None:
-    job = JOBS[job_id]
+    job = JOBS.get(job_id)
+    if job is None or _is_terminal(job):
+        return
     job["status"] = "running"
+    job.setdefault("cancel_requested", False)
+    for _k in ("reasoning", "answer"):
+        _v = job.get(_k)
+        if isinstance(_v, str):
+            job[_k] = [_v] if _v else []
+        elif not isinstance(_v, list):
+            job[_k] = []
+    job.setdefault("sources", [])
+    job.setdefault("gl", [])
+    job["error"] = None
     try:
         ctx = retrieve(body.question)
         if not ctx:
@@ -1301,15 +1525,35 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
                 headers=_llm_headers(),
             ) as r:
                 if r.status_code in (401, 403):
-                    job["status"] = "error"
-                    job["error"] = _llm_auth_mismatch_msg(r.status_code)
+                    _finish_job(job, "error", _llm_auth_mismatch_msg(r.status_code))
                     return
                 if r.status_code != 200:
-                    job["status"] = "error"
-                    job["error"] = (await r.aread()).decode()[:300]
+                    _finish_job(job, "error", (await r.aread()).decode()[:300])
                     return
-                async for line in r.aiter_lines():
+                idle = _idle_timeout_seconds()
+                it = r.aiter_lines()
+                last_progress = time.monotonic()
+                while True:
+                    if job.get("cancel_requested"):
+                        raise asyncio.CancelledError()
+                    remaining = idle - (time.monotonic() - last_progress)
+                    if remaining <= 0:
+                        raise RuntimeError(
+                            f"model stream stalled: no update for {idle:g} seconds "
+                            "(idle timeout); please try again")
+                    try:
+                        line = await asyncio.wait_for(it.__anext__(), timeout=remaining)
+                    except StopAsyncIteration:
+                        break
+                    except (asyncio.TimeoutError, TimeoutError):
+                        raise RuntimeError(
+                            f"model stream stalled: no update for {idle:g} seconds "
+                            "(idle timeout); please try again")
                     if not line.startswith("data:"):
+                        if time.monotonic() - last_progress >= idle:
+                            raise RuntimeError(
+                                f"model stream stalled: no update for {idle:g} seconds "
+                                "(idle timeout); please try again")
                         continue
                     data = line[5:].strip()
                     if data == "[DONE]":
@@ -1322,16 +1566,32 @@ async def _run_chat(job_id: str, body: ChatIn) -> None:
                     rsn = delta.get("reasoning_content")
                     if rsn:
                         job["reasoning"].append(rsn)
+                        last_progress = time.monotonic()
                     content = delta.get("content")
                     if content:
                         job["answer"].append(content)
+                        last_progress = time.monotonic()
+                    elif not rsn and time.monotonic() - last_progress >= idle:
+                        raise RuntimeError(
+                            f"model stream stalled: no update for {idle:g} seconds "
+                            "(idle timeout); please try again")
         srcs = sorted({m.group(1) for m in (re.search(r"\[src: ([^\]]+)\]", c) for c in ctx) if m})
         job["sources"] = srcs
         job["gl"] = [{"name": g["name"], "url": g["url"], "file": g["file"]} for g in gl_used]
-        job["status"] = "done"
+        _finish_job(job, "done", None)
+    except asyncio.CancelledError:
+        if job.get("status") not in TERMINAL_STATUSES:
+            _finish_job(job, "cancelled", job.get("error") or "cancelled by user")
+        elif job.get("finished_at") is None:
+            _compact_job(job)
+            job["finished_at"] = time.time()
     except Exception as e:  # surfaced to the client via job["error"]
-        job["status"] = "error"
-        job["error"] = str(e)
+        if job.get("status") == "cancelled":
+            _compact_job(job)
+            if job.get("finished_at") is None:
+                job["finished_at"] = time.time()
+        else:
+            _finish_job(job, "error", str(e))
 
 
 @app.post("/api/chat")
@@ -1339,8 +1599,16 @@ async def chat_start(body: ChatIn, request: Request):
     check_auth(request)
     if not INDEX["bm25"]:
         raise HTTPException(status_code=503, detail="no documents indexed")
-    _prune_jobs()
+    _expire_jobs()
+    limit = _max_jobs_limit()
+    while len(JOBS) >= limit:
+        oldest = _oldest_terminal_id()
+        if oldest is None:
+            raise HTTPException(status_code=429, detail="too many chat jobs; try again later")
+        JOBS.pop(oldest, None)
+        _JOB_TASKS.pop(oldest, None)
     job_id = secrets.token_hex(8)
+    now = time.time()
     JOBS[job_id] = {
         "status": "queued",
         "question": body.question,
@@ -1349,18 +1617,74 @@ async def chat_start(body: ChatIn, request: Request):
         "sources": [],
         "gl": [],
         "error": None,
+        "created_at": now,
+        "finished_at": None,
+        "cancel_requested": False,
     }
-    asyncio.create_task(_run_chat(job_id, body))
+    task = asyncio.create_task(_run_chat(job_id, body))
+    _JOB_TASKS[job_id] = task
+
+    def _done(t: asyncio.Task, jid: str = job_id) -> None:
+        _JOB_TASKS.pop(jid, None)
+        try:
+            t.result()
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            pass
+    task.add_done_callback(_done)
     return {"id": job_id}
 
 
 @app.get("/api/chat/{job_id}")
 async def chat_poll(job_id: str, request: Request):
     check_auth(request)
+    _expire_jobs()
     job = JOBS.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="job expired or server restarted")
-    return job
+    return _public_job(job)
+
+
+@app.delete("/api/chat/{job_id}")
+async def chat_cancel(job_id: str, request: Request):
+    check_auth(request)
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job expired or server restarted")
+    _cancel_job(job_id)
+    return _public_job(JOBS[job_id])
+
+
+@app.post("/api/chat/{job_id}/cancel")
+async def chat_cancel_post(job_id: str, request: Request):
+    check_auth(request)
+    job = JOBS.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="job expired or server restarted")
+    _cancel_job(job_id)
+    return _public_job(JOBS[job_id])
+
+
+@app.on_event("shutdown")
+async def _shutdown_chat_jobs() -> None:
+    for job in JOBS.values():
+        if not _is_terminal(job):
+            job["cancel_requested"] = True
+    for task in list(_JOB_TASKS.values()):
+        if not task.done():
+            task.cancel()
+    if _JOB_TASKS:
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*list(_JOB_TASKS.values()), return_exceptions=True),
+                timeout=5.0,
+            )
+        except (asyncio.TimeoutError, TimeoutError):
+            pass
+    for job in JOBS.values():
+        if not _is_terminal(job):
+            _finish_job(job, "cancelled", "server shutting down")
 
 if __name__ == "__main__":
     # HCH-7: enforce the local privacy boundary *before* serving anything.

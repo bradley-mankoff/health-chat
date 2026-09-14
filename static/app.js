@@ -208,10 +208,14 @@ function applyLinks(text, gl) {
   return text;
 }
 
+function txt(v) {
+  return Array.isArray(v) ? v.join("") : (v || "");
+}
+
 function render(job, els, done) {
   const think = els.think, thinkBody = els.thinkBody, answerBody = els.answerBody;
-  const thinkText = job.reasoning.join("");
-  const answer = job.answer.join("");
+  const thinkText = txt(job.reasoning);
+  const answer = txt(job.answer);
   const gl = job.gl || [];
   if (thinkText) {
     think.hidden = false;
@@ -250,10 +254,10 @@ async function pollJob(id, els) {
     }
     if (statusEl) statusEl.textContent = job.status === "queued"
       ? "waiting for the model\u2026" : "";
-    if (job.status === "error") throw terminal(job.error || "generation failed");
+    if (job.status === "error" || job.status === "cancelled") throw terminal(job.error || "generation failed");
     render(job, els, job.status === "done");
     if (job.status === "done") {
-      history.push({ role: "assistant", content: job.answer.join("") });
+      history.push({ role: "assistant", content: txt(job.answer) });
       return;
     }
     await new Promise(r => setTimeout(r, 2500));
@@ -312,7 +316,7 @@ async function resumeJob() {
     if (!res.ok) { localStorage.removeItem(JOBKEY); return; }
     job = await res.json();
   } catch (e) { return; }
-  if (job.status === "error") {
+  if (job.status === "error" || job.status === "cancelled") {
     addMsg("user", esc(job.question));
     const b = addMsg("ai", '<div class="answer-body"></div>', "err");
     b.textContent = "This answer failed server-side: " + (job.error || "generation failed") +
@@ -331,7 +335,7 @@ async function resumeJob() {
   };
   if (job.status === "done") {
     render(job, els, true);
-    history.push({ role: "assistant", content: job.answer.join("") });
+    history.push({ role: "assistant", content: txt(job.answer) });
     localStorage.removeItem(JOBKEY);
     return;
   }
