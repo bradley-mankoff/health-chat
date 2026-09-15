@@ -6,6 +6,7 @@
 - **Authenticated LLM channel.** Health-chat and the supported runner share `LLM_API_KEY` (env → `.llm_api_key` → generated). Model discovery and chat requests send `Authorization: Bearer <key>`, and each chat first verifies the endpoint accepts the key and rejects anonymous requests — otherwise no prompt is sent and an actionable identity error is reported. Start the model with `bash scripts/run_llama.sh` so `llama-server --api-key` is enforced.
 - **No outbound network in v1.** There is no web search, no analytics, no telemetry. The only outbound HTTP the server makes is to the local LLM.
 - **Guideline fetcher is opt-in.** `scripts/fetch_guidelines.py` downloads public guideline excerpts from their publishers. It does not send your health data anywhere.
+- **Hash-locked dependencies.** Production installs come from a committed hash lock (`requirements.txt`, refreshed per [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md)); CI audits it (HCH-24). Open advisory exceptions, if any, are listed in `docs/DEPENDENCIES.md`.
 
 ## What is NOT protected
 

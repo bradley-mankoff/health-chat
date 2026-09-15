@@ -82,13 +82,17 @@ if ($venvOk -ne "1") {
   exit 1
 }
 & $VenvPy -m pip install -U pip wheel -q
+# install the committed hash lock first (requirements-dev.txt is a superset of
+# requirements.txt), then the project itself without re-resolving dependencies
 if ($Dev) {
-  Write-Host "-> pip install -e .[dev]"
-  & $VenvPy -m pip install -e ".[dev]" -q
+  Write-Host "-> pip install -r requirements-dev.txt (locked)"
+  & $VenvPy -m pip install --require-hashes -r requirements-dev.txt -q
 } else {
-  Write-Host "-> pip install -e ."
-  & $VenvPy -m pip install -e . -q
+  Write-Host "-> pip install -r requirements.txt (locked)"
+  & $VenvPy -m pip install --require-hashes -r requirements.txt -q
 }
+Write-Host "-> pip install -e . --no-deps"
+& $VenvPy -m pip install -e . --no-deps -q
 
 if (Test-Path "resources\manifest.json") {
   Write-Host "-> fetching guidelines (missing only)"

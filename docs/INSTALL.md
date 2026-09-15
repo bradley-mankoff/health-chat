@@ -8,7 +8,7 @@
 bash scripts/install.sh
 ```
 
-What it does: creates `.venv` (reuses an existing one only if its interpreter is 3.10+), `pip install -e .`, fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+. Unknown installer arguments are rejected. Developers: `bash scripts/install.sh --dev` (POSIX) or `powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev` (Windows) to include the pytest suite.
+What it does: creates `.venv` (reuses an existing one only if its interpreter is 3.10+), `pip install --require-hashes -r requirements.txt` then `pip install -e . --no-deps` (exact, hash-verified versions — see [DEPENDENCIES.md](DEPENDENCIES.md)), fetches guideline excerpts per `resources/manifest.json` (missing only). Idempotent — safe to re-run. Requires Python 3.10+. Unknown installer arguments are rejected. Developers: `bash scripts/install.sh --dev` (POSIX) or `powershell -ExecutionPolicy Bypass -File scripts\install.ps1 -Dev` (Windows) to include the pytest suite. Installs are pinned by committed lock files; maintainers refresh them with `bash scripts/refresh_locks.sh` (requires [uv](https://docs.astral.sh/uv/)).
 
 Then:
 

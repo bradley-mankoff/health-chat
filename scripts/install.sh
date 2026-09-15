@@ -3,7 +3,7 @@
 set -euo pipefail
 # Health-chat macOS/Linux installer — idempotent.
 # - Creates venv in .venv
-# - pip installs pyproject
+# - pip installs the committed hash lock (requirements.txt / requirements-dev.txt), then the project editable (--no-deps)
 # - Fetches guideline corpus
 # - Prints next steps for model download + run
 #
@@ -75,13 +75,17 @@ if ! "$VENV_PY" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1
   exit 1
 fi
 "$VENV_PY" -m pip install -U pip wheel -q
+# install the committed hash lock first (requirements-dev.txt is a superset of
+# requirements.txt), then the project itself without re-resolving dependencies
 if (( DEV )); then
-  echo "-> pip install -e .[dev]"
-  "$VENV_PY" -m pip install -e ".[dev]" -q
+  echo "-> pip install -r requirements-dev.txt (locked)"
+  "$VENV_PY" -m pip install --require-hashes -r requirements-dev.txt -q
 else
-  echo "-> pip install -e ."
-  "$VENV_PY" -m pip install -e . -q
+  echo "-> pip install -r requirements.txt (locked)"
+  "$VENV_PY" -m pip install --require-hashes -r requirements.txt -q
 fi
+echo "-> pip install -e . --no-deps"
+"$VENV_PY" -m pip install -e . --no-deps -q
 
 # guidelines
 if [[ -f resources/manifest.json ]]; then
