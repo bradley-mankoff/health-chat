@@ -97,6 +97,7 @@ Agents: see [AGENTS.md](AGENTS.md) — one-page quick start (clone, install, mod
 pytest -q
 .venv/bin/python scripts/fetch_guidelines.py --dry-run
 ```
+Dependency pins are hash-locked; regenerate from `pyproject.toml` with `uv` — see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
 
 ---
 
